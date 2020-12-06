@@ -90,12 +90,10 @@ fn part2(bps: &[BoardingPass]) -> Result<()> {
     let mut last_id = seat_ids[0];
 
     for sid in seat_ids.iter().skip(1) {
-        if sid - last_id > 1
-        {
-            println!("(part2) Seat-ID is: {}", sid-1);
+        if sid - last_id > 1 {
+            println!("(part2) Seat-ID is: {}", sid - 1);
             break;
-        }
-        else {
+        } else {
             last_id = *sid;
         }
     }
