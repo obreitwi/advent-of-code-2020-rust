@@ -80,7 +80,7 @@ impl Passport {
                 for entry in line.split_whitespace() {
                     let key_value: Vec<_> = entry.split(':').collect();
                     if key_value.len() != 2 {
-                        bail!(format!("Malformed entry: {}", entry));
+                        bail!("Malformed entry: {}", entry);
                     } else {
                         entries.insert(key_value[0].to_string(), key_value[1].to_string());
                     }

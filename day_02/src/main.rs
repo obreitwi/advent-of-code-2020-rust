@@ -34,7 +34,7 @@ fn validate_part1(s: &str) -> Result<bool> {
     let s: Vec<_> = s.split_whitespace().collect();
 
     if s.len() != 3 {
-        bail!(format!("Expected 3 parts, found {}.", s.len()));
+        bail!("Expected 3 parts, found {}.", s.len());
     }
 
     let range = s[0];
@@ -43,7 +43,7 @@ fn validate_part1(s: &str) -> Result<bool> {
 
     let range: Vec<_> = range.split('-').collect();
     if range.len() != 2 {
-        bail!(format!("Invalid range specified: {}", s[0]));
+        bail!("Invalid range specified: {}", s[0]);
     }
 
     let occu_min: usize = range[0].parse()?;

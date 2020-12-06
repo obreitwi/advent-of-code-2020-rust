@@ -49,7 +49,7 @@ impl TryFrom<&str> for BoardingPass {
                     col = col << 1;
                     col += 1
                 }
-                _ => bail!(format!("Encountered invalid character: {}", c)),
+                _ => bail!("Encountered invalid character: {}", c),
             }
         }
 
