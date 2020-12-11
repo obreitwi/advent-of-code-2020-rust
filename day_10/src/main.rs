@@ -130,27 +130,40 @@ impl AdapterChain {
 
     pub fn count(&self) -> u64 {
         let mut adapter_to_count: HashMap<u64, u64> = HashMap::new();
+
+        adapter_to_count.insert(0, 1);
+
+        for adp in self.adapters_sorted.iter() {
+            let count = *adapter_to_count.get(adp).unwrap();
+
+            for next in self.links_from(*adp) {
+                *adapter_to_count.entry(next).or_insert(0) += count;
+            }
+        }
+
+        adapter_to_count[&self.adapters_sorted[self.adapters_sorted.len() - 1]]
     }
 
     fn links_from(&self, adapter: u64) -> Vec<u64> {
         let mut rv = Vec::new();
         for diff in 1..(self.max_diff + 1) {
-            if diff >= adapter {
-                let link = adapter - diff;
-                if self.contains(link) {
-                    rv.push(link);
-                }
+            let link = adapter + diff;
+            if self.adapters.contains(&link) {
+                rv.push(link);
             }
         }
+        println!("Links from {}: {:?}", adapter, rv);
         rv
     }
 
-    fn links_to(&self, adapter: u64) -> Vec<u64> {
+    fn _links_to(&self, adapter: u64) -> Vec<u64> {
         let mut rv = Vec::new();
         for diff in 1..(self.max_diff + 1) {
-            let link = adapter + diff;
-            if self.contains(link) {
-                rv.push(link);
+            if diff <= adapter {
+                let link = adapter - diff;
+                if self.adapters.contains(&link) {
+                    rv.push(link);
+                }
             }
         }
         rv
@@ -175,7 +188,8 @@ fn part1(numbers: &[u64]) -> Result<()> {
 }
 
 fn part2(numbers: &[u64]) -> Result<()> {
-    let counts = count_combinations(&numbers[..], 3);
+    // let counts = count_combinations(&numbers[..], 3);
+    let counts = AdapterChain::new(numbers, 3).count();
 
     println!("Found {} combinations..", counts);
 
