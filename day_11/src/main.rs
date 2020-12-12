@@ -51,14 +51,13 @@ enum Position {
 impl Position {
     pub fn parse(c: char) -> Result<Self> {
         use Position::*;
-        if c == '.' {
-            Ok(Floor)
-        } else if c == 'L' {
-            Ok(Empty)
-        } else if c == '#' {
-            Ok(Occupied)
-        } else {
-            bail!("Invalid char for position: {}", c);
+        match c {
+            '.' => Ok(Floor),
+            'L' => Ok(Empty),
+            '#' => Ok(Occupied),
+            _ => {
+                bail!("Invalid char for position: {}", c);
+            }
         }
     }
 
