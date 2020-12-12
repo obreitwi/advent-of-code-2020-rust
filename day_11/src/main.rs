@@ -18,16 +18,25 @@ fn main() -> Result<()> {
     println!("{}", grid);
 
     part1(grid.clone())?;
+    part2(grid.clone())?;
 
     Ok(())
 }
 
-fn part1(grid: Grid) -> Result<()>
-{
+fn part1(grid: Grid) -> Result<()> {
     let fixed = grid.update_till_fixed();
     let num_occupied = fixed.count(Position::Occupied);
 
     println!("(part1) Number of occupied seats: {}", num_occupied);
+
+    Ok(())
+}
+
+fn part2(grid: Grid) -> Result<()> {
+    let fixed = grid.update_directional_till_fixed();
+    let num_occupied = fixed.count(Position::Occupied);
+
+    println!("(part2) Number of occupied seats: {}", num_occupied);
 
     Ok(())
 }
@@ -126,6 +135,20 @@ impl Grid {
         Self { lines, ..*self }
     }
 
+    pub fn update_directional(&self) -> Self {
+        let mut lines = Vec::with_capacity(self.height);
+
+        for y in 0..(self.height as i64) {
+            let mut newline = Vec::with_capacity(self.width);
+            for x in 0..(self.width as i64) {
+                newline.push(self.update_directional_at(x, y));
+            }
+            lines.push(newline);
+        }
+
+        Self { lines, ..*self }
+    }
+
     pub fn update_till_fixed(self) -> Self {
         let mut old = self;
         let mut step = 0;
@@ -145,12 +168,35 @@ impl Grid {
         }
     }
 
+    pub fn update_directional_till_fixed(self) -> Self {
+        let mut old = self;
+        let mut step = 0;
+
+        println!("Initial: {}", old);
+
+        loop {
+            step += 1;
+            let new = old.update_directional();
+            println!("After step #{}: {}", step, new);
+
+            if old == new {
+                return new;
+            } else {
+                old = new;
+            }
+        }
+    }
+
     fn read_line(line: &str) -> Result<Vec<Position>> {
         let mut rv: Vec<_> = Vec::new();
         for c in line.chars() {
             rv.push(Position::parse(c)?);
         }
         Ok(rv)
+    }
+
+    fn reached_edge(&self, x: i64, y: i64) -> bool {
+        x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64
     }
 
     fn get_neighbors(&self, x: i64, y: i64) -> Vec<Position> {
@@ -161,6 +207,36 @@ impl Grid {
                     continue;
                 }
                 rv.push(self.get_pos(x + dx, y + dy));
+            }
+        }
+        rv
+    }
+
+    fn get_neighbors_directional(&self, x: i64, y: i64) -> Vec<Position> {
+        let mut rv = Vec::new();
+        for dy in (-1)..2 {
+            for dx in (-1)..2 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let mut multiplier = 1;
+                while !self.reached_edge(x + dx * multiplier, y + dy * multiplier) {
+                    let neighbour_x = x + multiplier * dx;
+                    let neighbour_y = y + multiplier * dy;
+                    match self.get_pos(neighbour_x, neighbour_y) {
+                        Position::Floor if self.reached_edge(neighbour_x, neighbour_y) => {
+                            rv.push(Position::Floor)
+                        }
+                        Position::Floor => {
+                            multiplier += 1;
+                            continue;
+                        }
+                        other => {
+                            rv.push(other);
+                            break;
+                        }
+                    }
+                }
             }
         }
         rv
@@ -190,6 +266,31 @@ impl Grid {
             }
             Occupied => {
                 if get_num_occupied() >= 4 {
+                    Empty
+                } else {
+                    Occupied
+                }
+            }
+        }
+    }
+
+    fn update_directional_at(&self, x: i64, y: i64) -> Position {
+        use Position::*;
+
+        let get_num_occupied =
+            || -> usize { Occupied.count_in(&self.get_neighbors_directional(x, y)[..]) };
+
+        match self.get_pos(x, y) {
+            Floor => Floor,
+            Empty => {
+                if get_num_occupied() == 0 {
+                    Occupied
+                } else {
+                    Empty
+                }
+            }
+            Occupied => {
+                if get_num_occupied() >= 5 {
                     Empty
                 } else {
                     Occupied
