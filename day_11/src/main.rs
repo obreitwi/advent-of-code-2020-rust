@@ -17,10 +17,22 @@ fn main() -> Result<()> {
     let grid = Grid::read_from(&input)?;
     println!("{}", grid);
 
+    part1(grid.clone())?;
+
     Ok(())
 }
 
-#[derive(Clone)]
+fn part1(grid: Grid) -> Result<()>
+{
+    let fixed = grid.update_till_fixed();
+    let num_occupied = fixed.count(Position::Occupied);
+
+    println!("(part1) Number of occupied seats: {}", num_occupied);
+
+    Ok(())
+}
+
+#[derive(Clone, PartialEq)]
 enum Position {
     Floor,
     Empty,
@@ -40,6 +52,10 @@ impl Position {
             bail!("Invalid char for position: {}", c);
         }
     }
+
+    pub fn count_in(&self, slice: &[Position]) -> usize {
+        slice.iter().filter(move |e| self == *e).count()
+    }
 }
 
 impl fmt::Display for Position {
@@ -54,6 +70,7 @@ impl fmt::Display for Position {
     }
 }
 
+#[derive(Clone, PartialEq)]
 struct Grid {
     lines: Vec<Vec<Position>>,
     width: usize,
@@ -87,6 +104,47 @@ impl Grid {
         })
     }
 
+    pub fn count(&self, position: Position) -> usize {
+        let mut count = 0;
+        for line in self.lines.iter() {
+            count += position.count_in(&line[..]);
+        }
+        count
+    }
+
+    pub fn update(&self) -> Self {
+        let mut lines = Vec::with_capacity(self.height);
+
+        for y in 0..(self.height as i64) {
+            let mut newline = Vec::with_capacity(self.width);
+            for x in 0..(self.width as i64) {
+                newline.push(self.update_at(x, y));
+            }
+            lines.push(newline);
+        }
+
+        Self { lines, ..*self }
+    }
+
+    pub fn update_till_fixed(self) -> Self {
+        let mut old = self;
+        let mut step = 0;
+
+        println!("Initial: {}", old);
+
+        loop {
+            step += 1;
+            let new = old.update();
+            println!("After step #{}: {}", step, new);
+
+            if old == new {
+                return new;
+            } else {
+                old = new;
+            }
+        }
+    }
+
     fn read_line(line: &str) -> Result<Vec<Position>> {
         let mut rv: Vec<_> = Vec::new();
         for c in line.chars() {
@@ -97,12 +155,9 @@ impl Grid {
 
     fn get_neighbors(&self, x: i64, y: i64) -> Vec<Position> {
         let mut rv = Vec::new();
-        for dy in (-1)..2
-        {
-            for dx in (-1)..2
-            {
-                if dx == 0 && dy == 0
-                {
+        for dy in (-1)..2 {
+            for dx in (-1)..2 {
+                if dx == 0 && dy == 0 {
                     continue;
                 }
                 rv.push(self.get_pos(x + dx, y + dy));
@@ -111,14 +166,35 @@ impl Grid {
         rv
     }
 
-    fn get_pos(&self, x: i64, y: i64) -> Position
-    {
-        if x < 0 || y < 0 || x as usize >= self.width || y as usize >= self.height
-        {
+    fn get_pos(&self, x: i64, y: i64) -> Position {
+        if x < 0 || y < 0 || x as usize >= self.width || y as usize >= self.height {
             Position::Floor
-        }
-        else {
+        } else {
             self.lines[y as usize][x as usize].clone()
+        }
+    }
+
+    fn update_at(&self, x: i64, y: i64) -> Position {
+        use Position::*;
+
+        let get_num_occupied = || -> usize { Occupied.count_in(&self.get_neighbors(x, y)[..]) };
+
+        match self.get_pos(x, y) {
+            Floor => Floor,
+            Empty => {
+                if get_num_occupied() == 0 {
+                    Occupied
+                } else {
+                    Empty
+                }
+            }
+            Occupied => {
+                if get_num_occupied() >= 4 {
+                    Empty
+                } else {
+                    Occupied
+                }
+            }
         }
     }
 }
