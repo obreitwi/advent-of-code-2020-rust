@@ -150,11 +150,16 @@ impl Schedule {
             .collect();
 
         let mut timestep: i64 = 0;
+        let mut to_add = largest as i64;
+        let mut idx_done = 1;
         'a: loop {
-            timestep += largest as i64;
+            timestep += to_add;
             eprint!("\rChecking: {}", timestep);
-            for bus in &busses[1..] {
-                if (timestep + bus_to_relat_offset[bus]) % *bus as i64 != 0 {
+            for bus in &busses[idx_done..] {
+                if (timestep + bus_to_relat_offset[bus]) % *bus as i64 == 0 {
+                    idx_done += 1;
+                    to_add *= *bus as i64;
+                } else {
                     continue 'a;
                 }
             }
