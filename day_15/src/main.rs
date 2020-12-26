@@ -12,7 +12,6 @@ fn main() {
     assert_eq!(play(&[3, 1, 2], 2020), 1836);
 
     println!("(part1) The 2020th number is {}", play(&input[..], 2020));
-    println!("(part2) The 2020th number is {}", play(&input[..], 30000000));
 
     assert_eq!(play(&[0, 3, 6], 30000000), 175594);
     assert_eq!(play(&[1, 3, 2], 30000000), 2578);
@@ -21,9 +20,14 @@ fn main() {
     assert_eq!(play(&[2, 3, 1], 30000000), 6895259);
     assert_eq!(play(&[3, 2, 1], 30000000), 18);
     assert_eq!(play(&[3, 1, 2], 30000000), 362);
+
+    println!(
+        "(part2) The 2020th number is {}",
+        play(&input[..], 30000000)
+    );
 }
 
-fn play(input: &[usize], num_turns: usize) -> usize {
+fn play_v1(input: &[usize], num_turns: usize) -> usize {
     let mut track: HashMap<usize, VecDeque<usize>> = HashMap::new();
 
     for (turn, num) in input.iter().enumerate() {
@@ -35,9 +39,8 @@ fn play(input: &[usize], num_turns: usize) -> usize {
     let mut last_num: usize = input[input.len() - 1];
 
     for turn in input.len()..num_turns {
-        if (turn+1) % 1000000 == 0
-        {
-            println!("{}/{}", turn+1, num_turns);
+        if (turn + 1) % 1000000 == 0 {
+            println!("{}/{}", turn + 1, num_turns);
         }
         let current_num = match track.get(&last_num) {
             None => 0,
@@ -116,4 +119,29 @@ fn play_v2(input: &[usize], num_turns: usize) -> usize {
     }
     println!("{}", last);
     last
+}
+
+fn play(input: &[usize], num_turns: usize) -> usize {
+    let mut track: HashMap<usize, usize> = HashMap::new();
+
+    for (turn, num) in input.iter().enumerate() {
+        track.insert(*num, turn);
+    }
+
+    let mut last_num: usize = input[input.len() - 1];
+
+    for turn in input.len()..num_turns {
+        if (turn + 1) % 10000000 == 0 {
+            println!("{}/{}", turn + 1, num_turns);
+        }
+        let current_num = match track.get(&last_num) {
+            None => 0,
+            Some(last_turn) => turn - last_turn - 1,
+        };
+        // println!("{}", current_num);
+        track.insert(last_num, turn - 1);
+        // println!("After turn #{}: {:#?}", turn, track);
+        last_num = current_num;
+    }
+    last_num
 }
