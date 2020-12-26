@@ -21,9 +21,15 @@ fn main() -> Result<()> {
     );
 
     let notes = Notes::read_from(&input)?;
-    println!("Notes: {:#?}", notes);
+    // println!("Notes: {:#?}", notes);
+    part1(&notes);
 
     Ok(())
+}
+
+fn part1(notes: &Notes) {
+    let rate = notes.ticket_scanning_error_rate();
+    println!("(part1) Ticket scanning error rate: {}", rate);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,6 +72,15 @@ impl FieldConstraint {
                 ranges,
             },
         ))
+    }
+
+    fn fits(&self, value: usize) -> bool {
+        for range in self.ranges.iter() {
+            if range.fits(value) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -131,5 +146,26 @@ impl Notes {
                 tickets,
             },
         ))
+    }
+
+    fn fits(&self, value: usize) -> bool {
+        for constr in self.constraints.iter() {
+            if constr.fits(value) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn ticket_scanning_error_rate(&self) -> usize {
+        let mut rate = 0;
+        for ticket in self.tickets.iter() {
+            for value in ticket.fields.iter() {
+                if !self.fits(*value) {
+                    rate += value;
+                }
+            }
+        }
+        rate
     }
 }
