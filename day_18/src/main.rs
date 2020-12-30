@@ -20,14 +20,14 @@ fn main() -> Result<()> {
     );
 
     let exprs = Expression::read_from(&input)?;
-    part1(&exprs[..]);
+    part2(&exprs[..]);
 
     Ok(())
 }
 
-fn part1(exprs: &[Expression]) {
+fn part2(exprs: &[Expression]) {
     let result: i64 = exprs.iter().map(|e| e.eval()).sum();
-    println!("(part1) Result: {}", result);
+    println!("(part2) Result: {}", result);
 }
 
 #[derive(Debug, Clone)]
@@ -91,13 +91,45 @@ impl Expression {
     }
 
     fn eval(&self) -> i64 {
-        let mut result = self.initial.clone();
+        use Operator::*;
+        let mut current = self.initial.clone();
 
+        let mut evaluate_later: Vec<(Operand, Operator)> = Vec::new();
+
+        // first pass - apply addition first
         for (op, operand) in self.ops.iter() {
-            result = op.apply(&result, operand);
+            match op {
+                Mult => {
+                    evaluate_later.push((current, Mult));
+                    current = operand.clone();
+                }
+                Add => {
+                    current = Add.apply(&current, operand);
+                }
+            }
         }
 
-        result.eval()
+        let last = current;
+
+        let mut current: Option<(Operand, Operator)> = None;
+
+        // second pass - apply everything (i.e. multiplication)
+        for (operand, op) in evaluate_later.into_iter() {
+            match current {
+                None => {
+                    current = Some((operand, op));
+                }
+                Some((old_operand, old_op)) => {
+                    let intermediate = old_op.apply(&old_operand, &operand);
+                    current = Some((intermediate, op));
+                }
+            }
+        }
+        if let Some((operand, op)) = current {
+            op.apply(&operand, &last).eval()
+        } else {
+            last.eval()
+        }
     }
 }
 
