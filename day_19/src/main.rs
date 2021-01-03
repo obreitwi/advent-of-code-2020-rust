@@ -128,7 +128,7 @@ impl RuleSet {
                         return Ok(None);
                     }
                 }
-                None => bail!("Input ended unexpectedly!"),
+                None => return Ok(None),
             },
             Rule::Alt(vec) => {
                 'a: for rls in vec.iter() {
