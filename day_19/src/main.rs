@@ -25,22 +25,36 @@ fn main() -> Result<()> {
     println!("ruleset: {:#?}", ruleset);
 
     part1(&ruleset)?;
+    part2(ruleset)?;
 
     Ok(())
 }
 
 fn part1(ruleset: &RuleSet) -> Result<()> {
-    println!(
-        "(part1) num matching entries: {}",
-        ruleset.get_matching()?.len()
-    );
+    let matching = ruleset.get_matching()?;
+    println!("================================================================================");
+    println!("(part1) num matching entries: {}", matching.len());
+    println!("================================================================================");
     Ok(())
 }
 
-#[derive(Debug)]
+fn part2(mut ruleset: RuleSet) -> Result<()> {
+    ruleset.rules.insert(8, Rule::Multi(42));
+    ruleset.rules.insert(11, Rule::SameN(42, 31));
+    println!("{:#?}", ruleset);
+    let matching = ruleset.get_matching()?;
+    println!("================================================================================");
+    println!("(part2) num matching entries: {}", matching.len());
+    println!("================================================================================");
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
 enum Rule {
     Explicit(char),
     Alt(Vec<Vec<usize>>),
+    Multi(usize),
+    SameN(usize, usize),
 }
 
 impl Rule {
@@ -66,7 +80,7 @@ impl Rule {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RuleSet {
     rules: HashMap<usize, Rule>,
     strings: Vec<String>,
@@ -116,11 +130,17 @@ impl RuleSet {
             .get(&idx)
             .with_context(|| format!("Invalid rule index: {}", idx))?;
 
+        eprintln!(
+            "Trying rule #{} while matching {}",
+            idx,
+            i.clone().collect::<String>()
+        );
+
         match rule {
             Rule::Explicit(literal) => match i.next() {
                 Some(c) => {
                     if *literal == c {
-                        return Ok(Some(i.clone()));
+                        return Ok(Some(i));
                     } else {
                         return Ok(None);
                     }
@@ -143,6 +163,69 @@ impl RuleSet {
                     return Ok(Some(i.clone()));
                 }
                 return Ok(None);
+            }
+            Rule::Multi(idx) => {
+                // longest matching only
+                let mut times_matched = 0;
+                let mut i = i.clone();
+                loop {
+                    match self.match_rule(*idx, i.clone())? {
+                        Some(i_new) => {
+                            i = i_new;
+                            times_matched += 1;
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                if times_matched > 0 {
+                    eprintln!("Matched multi-rule #{} {} times", idx, times_matched);
+                    Ok(Some(i))
+                } else {
+                    Ok(None)
+                }
+            }
+            Rule::SameN(idx_fst, idx_snd) => {
+                // longest matching only for now
+                let mut i = i.clone();
+                let mut times_matched_fst = 0;
+                loop {
+                    match self.match_rule(*idx_fst, i.clone())? {
+                        Some(i_new) => {
+                            i = i_new;
+                            times_matched_fst += 1;
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                let times_matched_fst = times_matched_fst;
+
+                if times_matched_fst == 0 {
+                    Ok(None)
+                } else {
+                    let mut times_matched_snd = 0;
+                    for _ in 0..times_matched_fst {
+                        match self.match_rule(*idx_snd, i.clone())? {
+                            Some(i_new) => {
+                                i = i_new;
+                                times_matched_snd += 1;
+                            }
+                            None => {
+                                break;
+                            }
+                        }
+                    }
+                    eprintln!("Matched first same-rule #{} {} times. Matched second same-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
+
+                    if times_matched_fst == times_matched_snd {
+                        Ok(Some(i))
+                    } else {
+                        Ok(None)
+                    }
+                }
             }
         }
     }
