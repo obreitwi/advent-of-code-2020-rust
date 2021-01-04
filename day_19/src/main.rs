@@ -48,24 +48,21 @@ impl Rule {
         let (i, idx) = terminated(digit1, tuple((char(':'), space0)))(i)?;
         let idx = idx.parse().unwrap();
 
-        match delimited::<_, _, _, _, nom::error::Error<&str>, _, _, _>(
-            char('"'),
-            anychar,
-            char('"'),
-        )(i)
-        {
-            Ok((i, literal)) => Ok((i, (idx, Rule::Explicit(literal.into())))),
-            Err(_) => {
-                let (i, alt) = map_res::<_, _, _, _, nom::error::Error<&str>, _, _>(
-                    separated_list1(
-                        tag(" | "),
-                        separated_list1(tag(" "), map_res(digit1, |s: &str| s.parse::<usize>())),
-                    ),
-                    |vv| Ok(Rule::Alt(vv)),
-                )(i)?;
-                Ok((i, (idx, alt)))
-            }
-        }
+        let (i, rule) = alt((Rule::parse_alt, Rule::parse_explicit))(i)?;
+        Ok((i, (idx, rule)))
+    }
+
+    fn parse_alt(i: &str) -> IResult<&str, Rule> {
+        let (i, alt) = separated_list1(
+            tag(" | "),
+            separated_list1(tag(" "), map_res(digit1, |s: &str| s.parse::<usize>())),
+        )(i)?;
+        Ok((i, Rule::Alt(alt)))
+    }
+
+    fn parse_explicit(i: &str) -> IResult<&str, Rule> {
+        let (i, s) = delimited(char('"'), anychar, char('"'))(i)?;
+        Ok((i, Rule::Explicit(s.into())))
     }
 }
 
