@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let ruleset = RuleSet::read_from(&input)?;
     println!("ruleset: {:#?}", ruleset);
 
-    part1(&ruleset)?;
+    // part1(&ruleset)?;
     part2(ruleset)?;
 
     Ok(())
@@ -39,13 +39,18 @@ fn part1(ruleset: &RuleSet) -> Result<()> {
 }
 
 fn part2(mut ruleset: RuleSet) -> Result<()> {
-    ruleset.rules.insert(8, Rule::Multi(42));
-    ruleset.rules.insert(11, Rule::SameN(42, 31));
+    // ruleset.rules.insert(8, Rule::Multi(42));
+    // ruleset.rules.insert(11, Rule::SameN(42, 31));
+    ruleset.rules.insert(0, Rule::AtLeast(42, 31));
     println!("{:#?}", ruleset);
     let matching = ruleset.get_matching()?;
     println!("================================================================================");
     println!("(part2) num matching entries: {}", matching.len());
     println!("================================================================================");
+
+    for (i, entry) in matching.iter().enumerate() {
+        println!("#{}: {}", i, entry);
+    }
     Ok(())
 }
 
@@ -55,6 +60,7 @@ enum Rule {
     Alt(Vec<Vec<usize>>),
     Multi(usize),
     SameN(usize, usize),
+    AtLeast(usize, usize), // first pattern must be matched at least as often as the second pattern
 }
 
 impl Rule {
@@ -125,6 +131,10 @@ impl RuleSet {
         idx: usize,
         mut i: I,
     ) -> Result<Option<I>> {
+        if i.clone().next().is_none() {
+            return Ok(None);
+        }
+
         let rule = self
             .rules
             .get(&idx)
@@ -162,7 +172,7 @@ impl RuleSet {
                     }
                     return Ok(Some(i.clone()));
                 }
-                return Ok(None);
+                Ok(None)
             }
             Rule::Multi(idx) => {
                 // longest matching only
@@ -180,7 +190,7 @@ impl RuleSet {
                     }
                 }
                 if times_matched > 0 {
-                    eprintln!("Matched multi-rule #{} {} times", idx, times_matched);
+                    // eprintln!("Matched multi-rule #{} {} times", idx, times_matched);
                     Ok(Some(i))
                 } else {
                     Ok(None)
@@ -218,11 +228,55 @@ impl RuleSet {
                             }
                         }
                     }
-                    eprintln!("Matched first same-rule #{} {} times. Matched second same-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
+                    // eprintln!("Matched first same-rule #{} {} times. Matched second same-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
 
                     if times_matched_fst == times_matched_snd {
                         Ok(Some(i))
                     } else {
+                        Ok(None)
+                    }
+                }
+            }
+            Rule::AtLeast(idx_fst, idx_snd) => {
+                // longest matching only for now
+                let mut i = i.clone();
+                let mut times_matched_fst = 0;
+                loop {
+                    match self.match_rule(*idx_fst, i.clone())? {
+                        Some(i_new) => {
+                            i = i_new;
+                            times_matched_fst += 1;
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                if times_matched_fst == 0 {
+                    Ok(None)
+                } else {
+                    let times_matched_fst = times_matched_fst;
+
+                    let mut times_matched_snd = 0;
+                    for _ in 0..times_matched_fst {
+                        match self.match_rule(*idx_snd, i.clone())? {
+                            Some(i_new) => {
+                                i = i_new;
+                                times_matched_snd += 1;
+                            }
+                            None => {
+                                break;
+                            }
+                        }
+                    }
+
+                    eprint!("Matched first AtLeast-rule #{} {} times. Matched second AtLeast-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
+                    if times_matched_snd > 0 && times_matched_fst >= times_matched_snd {
+                        eprintln!();
+                        eprintln!("Num bytes left: {}", i.clone().count());
+                        Ok(Some(i))
+                    } else {
+                        eprintln!("..aborting.");
                         Ok(None)
                     }
                 }
