@@ -48,9 +48,11 @@ fn part2(mut ruleset: RuleSet) -> Result<()> {
     println!("(part2) num matching entries: {}", matching.len());
     println!("================================================================================");
 
-    for (i, entry) in matching.iter().enumerate() {
-        println!("#{}: {}", i, entry);
-    }
+    /*
+     * for (i, entry) in matching.iter().enumerate() {
+     *     println!("#{}: {}", i, entry);
+     * }
+     */
     Ok(())
 }
 
@@ -252,7 +254,7 @@ impl RuleSet {
                         }
                     }
                 }
-                if times_matched_fst == 0 {
+                if times_matched_fst <= 1 {
                     Ok(None)
                 } else {
                     let times_matched_fst = times_matched_fst;
@@ -270,13 +272,13 @@ impl RuleSet {
                         }
                     }
 
-                    eprint!("Matched first AtLeast-rule #{} {} times. Matched second AtLeast-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
-                    if times_matched_snd > 0 && times_matched_fst >= times_matched_snd {
-                        eprintln!();
-                        eprintln!("Num bytes left: {}", i.clone().count());
+                    // eprint!("Matched first AtLeast-rule #{} {} times. Matched second AtLeast-rule #{} {} times.", idx_fst, times_matched_fst, idx_snd, times_matched_snd);
+                    if times_matched_snd > 0 && times_matched_fst > times_matched_snd {
+                        // eprintln!();
+                        // eprintln!("Num bytes left: {}", i.clone().count());
                         Ok(Some(i))
                     } else {
-                        eprintln!("..aborting.");
+                        // eprintln!("..aborting.");
                         Ok(None)
                     }
                 }
