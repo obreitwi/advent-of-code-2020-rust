@@ -1,0 +1,35 @@
+
+North:
+
+ >N>
+v   v
+W   E
+v   v
+ >S>
+
+
+East:
+
+ <W<
+v   v
+S   N
+v   v
+ <E<
+
+
+South:
+
+ <S<
+^   ^
+E   W
+^   ^
+ <N<
+
+
+West:
+
+ >E>
+^   ^
+N   S
+^   ^
+ >W>
