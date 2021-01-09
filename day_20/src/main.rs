@@ -44,7 +44,10 @@ fn part1(pic: &Picture) -> Result<()> {
     let adj = pic.adjacencies();
     eprintln!("{:#?}", adj);
 
-    let corners: Vec<_> = adj.iter().filter_map(|(idx, vec)| if vec.len() == 2 { Some(*idx) } else { None }).collect();
+    let corners: Vec<_> = adj
+        .iter()
+        .filter_map(|(idx, vec)| if vec.len() == 2 { Some(*idx) } else { None })
+        .collect();
 
     println!("{:?}", corners);
     println!("{}", corners.iter().cloned().product::<usize>());
@@ -68,6 +71,12 @@ struct Tile {
     orientation: Orientation,
 }
 
+impl AsRef<Orientation> for Orientation {
+    fn as_ref(&self) -> &Orientation {
+        self
+    }
+}
+
 impl fmt::Display for Tile {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // The `f` value implements the `Write` trait, which is what the
@@ -79,6 +88,11 @@ impl fmt::Display for Tile {
         }
         Ok(())
     }
+}
+
+fn reverse<T>(mut v: Vec<T>) -> Vec<T> {
+    v.reverse();
+    v
 }
 
 impl Tile {
@@ -110,41 +124,93 @@ impl Tile {
         ))
     }
 
-    fn edge_n(&self) -> Vec<char> {
-        self.data.iter().take(self.size).cloned().collect()
-    }
+    fn edge<O: AsRef<Orientation>>(&self, side: O) -> Vec<char> {
+        use Orientation::*;
+        match self.orientation {
+            North => match side.as_ref() {
+                //  >N>
+                // v   v
+                // W   E
+                // v   v
+                //  >S>
+                North => self.edge_raw(North), 
+                East => self.edge_raw(East),   //
+                South => self.edge_raw(South), //
+                West => self.edge_raw(West),   //
+            },
 
-    fn edge_e(&self) -> Vec<char> {
-        let mut rv = Vec::with_capacity(self.size);
-        for i in 0..self.size {
-            rv.push(self.data[i * self.size + self.size - 1]);
+            East => match side.as_ref() {
+                //  <W<
+                // v   v
+                // S   N
+                // v   v
+                //  <E<
+                North => reverse(self.edge_raw(West)),
+                East => self.edge_raw(North),
+                South => reverse(self.edge_raw(East)),
+                West => self.edge_raw(South),
+            },
+            South => match side.as_ref() {
+                //   <S<
+                //  ^   ^
+                //  E   W
+                //  ^   ^
+                //   <N<
+                North => reverse(self.edge_raw(South)),
+                East => reverse(self.edge_raw(West)),
+                South => reverse(self.edge_raw(North)),
+                West => reverse(self.edge_raw(East)),
+            },
+            West => match side.as_ref() {
+                //  <S<
+                // ^   ^
+                // E   W
+                // ^   ^
+                //  <N<
+                North => self.edge_raw(East),
+                East => reverse(self.edge_raw(South)),
+                South => self.edge_raw(West),
+                West => reverse(self.edge_raw(North)),
+            },
         }
-        rv
     }
 
-    fn edge_s(&self) -> Vec<char> {
-        self.data
-            .iter()
-            .skip(self.size * (self.size - 1))
-            .take(self.size)
-            .cloned()
-            .collect()
-    }
+    fn edge_raw<O: AsRef<Orientation>>(&self, side: O) -> Vec<char> {
+        use Orientation::*;
 
-    fn edge_w(&self) -> Vec<char> {
-        let mut rv = Vec::with_capacity(self.size);
-        for i in 0..self.size {
-            rv.push(self.data[i * self.size]);
+        match side.as_ref() {
+            North => self.data.iter().take(self.size).cloned().collect(),
+            East => {
+                let mut rv = Vec::with_capacity(self.size);
+                for i in 0..self.size {
+                    rv.push(self.data[i * self.size + self.size - 1]);
+                }
+                rv
+            }
+            South => self
+                .data
+                .iter()
+                .skip(self.size * (self.size - 1))
+                .take(self.size)
+                .cloned()
+                .collect(),
+            West => {
+                let mut rv = Vec::with_capacity(self.size);
+                for i in 0..self.size {
+                    rv.push(self.data[i * self.size]);
+                }
+                rv
+            }
         }
-        rv
     }
 
     fn edges(&self) -> Vec<Vec<char>> {
+        use Orientation::*;
         let mut rv = Vec::with_capacity(4);
-        rv.push(self.edge_n());
-        rv.push(self.edge_e());
-        rv.push(self.edge_s());
-        rv.push(self.edge_w());
+        rv.push(self.edge(North));
+        rv.push(self.edge(East));
+        rv.push(self.edge(South));
+        rv.push(self.edge(West));
         rv
     }
 
