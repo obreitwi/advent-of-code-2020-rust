@@ -10,11 +10,13 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     Finish, IResult,
 };
-use std::collections::{HashMap, HashSet};
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::fmt;
 use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
 
 fn main() -> Result<()> {
     let input = PathBuf::from(
@@ -24,24 +26,24 @@ fn main() -> Result<()> {
             .with_context(|| "No input provided!")?,
     );
 
-    let picture = Picture::read_from(&input)?;
-    part1(&picture)?;
+    let tileset = TileSet::read_from(&input)?;
+    let pic = part1(tileset)?;
 
     /*
-     * let first = picture.tiles.values().next().unwrap();
+     * let first = TileSet.tiles.values().next().unwrap();
      * eprintln!("{:?}", first.edge_n());
      * eprintln!("{:?}", first.edge_e());
      * eprintln!("{:?}", first.edge_s());
      * eprintln!("{:?}", first.edge_w());
      */
 
-    // eprintln!("{}", picture);
+    // eprintln!("{}", TileSet);
 
     Ok(())
 }
 
-fn part1(pic: &Picture) -> Result<()> {
-    let adj = pic.adjacencies();
+fn part1(ts: TileSet) -> Result<Picture> {
+    let adj = ts.adjacencies();
     eprintln!("{:#?}", adj);
 
     let corners: Vec<_> = adj
@@ -50,17 +52,67 @@ fn part1(pic: &Picture) -> Result<()> {
         .collect();
 
     println!("{:?}", corners);
-    println!("{}", corners.iter().cloned().product::<usize>());
+    let corners_prod = corners.iter().cloned().product::<usize>();
+    println!("{}", corners_prod);
 
-    Ok(())
+    let pic = Picture::assemble(ts)?;
+    let corners_assembled: Vec<_> = pic
+        .grid
+        .iter()
+        .filter_map(|(pos, weak_tile)| {
+            if pic.num_neighbors(*pos) == 2 {
+                Some(weak_tile.upgrade().unwrap().borrow().idx)
+            } else {
+                None
+            }
+        })
+        .collect();
+    println!("{:?}", corners_assembled);
+    let corners_assembled_prod = corners_assembled.iter().cloned().product::<usize>();
+    println!("{}", corners_assembled_prod);
+
+    assert_eq!(corners_prod, corners_assembled_prod);
+
+    Ok(pic)
 }
 
-#[derive(Debug, PartialEq, Hash)]
+#[derive(Debug, PartialEq, Hash, Clone, Copy)]
 enum Orientation {
     North,
     East,
     South,
     West,
+}
+
+const ORIENTATIONS: [Orientation; 4] = [
+    Orientation::North,
+    Orientation::East,
+    Orientation::South,
+    Orientation::West,
+];
+
+impl Into<usize> for Orientation {
+    fn into(self) -> usize {
+        use Orientation::*;
+        match self {
+            North => 0,
+            East => 1,
+            South => 2,
+            West => 3,
+        }
+    }
+}
+
+impl Orientation {
+    fn opposite(&self) -> Orientation {
+        use Orientation::*;
+        match self {
+            North => South,
+            East => West,
+            South => North,
+            West => East,
+        }
+    }
 }
 
 #[derive(Debug, Hash, PartialEq)]
@@ -69,12 +121,6 @@ struct Tile {
     data: Vec<char>,
     size: usize,
     orientation: Orientation,
-}
-
-impl AsRef<Orientation> for Orientation {
-    fn as_ref(&self) -> &Orientation {
-        self
-    }
 }
 
 impl fmt::Display for Tile {
@@ -124,22 +170,32 @@ impl Tile {
         ))
     }
 
-    fn edge<O: AsRef<Orientation>>(&self, side: O) -> Vec<char> {
+    fn rotate(&mut self) {
+        use Orientation::*;
+        self.orientation = match self.orientation {
+            North => East,
+            East => South,
+            South => West,
+            West => North,
+        }
+    }
+
+    fn edge(&self, side: Orientation) -> Vec<char> {
         use Orientation::*;
         match self.orientation {
-            North => match side.as_ref() {
+            North => match side {
                 //  >N>
                 // v   v
                 // W   E
                 // v   v
                 //  >S>
-                North => self.edge_raw(North), 
+                North => self.edge_raw(North),
                 East => self.edge_raw(East),   //
                 South => self.edge_raw(South), //
                 West => self.edge_raw(West),   //
             },
 
-            East => match side.as_ref() {
+            East => match side {
                 //  <W<
                 // v   v
                 // S   N
@@ -150,7 +206,7 @@ impl Tile {
                 South => reverse(self.edge_raw(East)),
                 West => self.edge_raw(South),
             },
-            South => match side.as_ref() {
+            South => match side {
                 //   <S<
                 //  ^   ^
                 //  E   W
@@ -161,7 +217,7 @@ impl Tile {
                 South => reverse(self.edge_raw(North)),
                 West => reverse(self.edge_raw(East)),
             },
-            West => match side.as_ref() {
+            West => match side {
                 //  <S<
                 // ^   ^
                 // E   W
@@ -175,10 +231,10 @@ impl Tile {
         }
     }
 
-    fn edge_raw<O: AsRef<Orientation>>(&self, side: O) -> Vec<char> {
+    fn edge_raw(&self, side: Orientation) -> Vec<char> {
         use Orientation::*;
 
-        match side.as_ref() {
+        match side {
             North => self.data.iter().take(self.size).cloned().collect(),
             East => {
                 let mut rv = Vec::with_capacity(self.size);
@@ -214,9 +270,13 @@ impl Tile {
         rv
     }
 
-    fn edge_match(i: &[char], j: &[char]) -> bool {
+    fn edge_match_approx(i: &[char], j: &[char]) -> bool {
         i.iter().zip(j.iter()).all(|(i, j)| i == j)
             || i.iter().rev().zip(j.iter()).all(|(i, j)| i == j)
+    }
+
+    fn edge_match(i: &[char], j: &[char]) -> bool {
+        i.iter().zip(j.iter()).all(|(i, j)| i == j)
     }
 
     fn count_matching_edges(&self, other: &Self) -> usize {
@@ -226,7 +286,7 @@ impl Tile {
 
         for e_i in edges_self.iter() {
             for e_j in edges_other.iter() {
-                if Self::edge_match(&e_i[..], &e_j[..]) {
+                if Self::edge_match_approx(&e_i[..], &e_j[..]) {
                     count += 1;
                 }
             }
@@ -251,23 +311,23 @@ impl Tile {
 }
 
 #[derive(Debug)]
-struct Picture {
-    tiles: HashMap<usize, Tile>,
+struct TileSet {
+    tiles: HashMap<usize, Rc<MutTile>>,
 }
 
-impl fmt::Display for Picture {
+impl fmt::Display for TileSet {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // The `f` value implements the `Write` trait, which is what the
         // write! macro is expecting. Note that this formatting ignores the
         // various flags provided to format strings.
         for tile in self.tiles.values() {
-            write!(f, "{}\n", tile)?;
+            write!(f, "{}\n", tile.borrow())?;
         }
         Ok(())
     }
 }
 
-impl Picture {
+impl TileSet {
     fn read_from(input: &Path) -> Result<Self> {
         let input = read_to_string(input)?;
         eprintln!("Read to string:\n{}", input);
@@ -280,7 +340,10 @@ impl Picture {
                 }
 
                 Ok(Self {
-                    tiles: tiles.into_iter().map(|t| (t.idx, t)).collect(),
+                    tiles: tiles
+                        .into_iter()
+                        .map(|t| (t.idx, Rc::new(RefCell::new(t))))
+                        .collect(),
                 })
             }
             Err(e) => bail!("Error while parsing: {}", e),
@@ -292,10 +355,12 @@ impl Picture {
 
         for tile in self.tiles.values() {
             for to_check in self.tiles.values() {
+                let tile = tile.borrow();
+                let to_check = to_check.borrow();
                 if tile.idx == to_check.idx {
                     continue;
                 }
-                let num_matches = tile.count_matching_edges(to_check);
+                let num_matches = tile.count_matching_edges(&to_check);
 
                 if num_matches > 1 {
                     eprintln!("{} <-> {}: {}", tile.idx, to_check.idx, num_matches);
@@ -307,5 +372,127 @@ impl Picture {
             }
         }
         rv
+    }
+}
+
+type Position = (i64, i64);
+type MutTile = RefCell<Tile>;
+
+fn advance(pos: Position, side: Orientation) -> Position {
+    use Orientation::*;
+    let (x, y) = pos;
+    match side {
+        North => (x, y + 1),
+        East => (x + 1, y),
+        South => (x, y - 1),
+        West => (x - 1, y),
+    }
+}
+
+#[derive(Debug)]
+struct Picture {
+    tiles: HashMap<usize, Rc<MutTile>>,
+    grid: HashMap<Position, Weak<MutTile>>,
+}
+
+impl Picture {
+    fn assemble(tileset: TileSet) -> Result<Self> {
+        let tiles = tileset.tiles;
+        let grid = HashMap::new();
+        let mut assembled: HashSet<usize> = HashSet::new();
+
+        let mut pic = Self { grid, tiles };
+
+        let mut queue: VecDeque<(Position, usize)> = VecDeque::new();
+        let first = pic
+            .tiles
+            .keys()
+            .cloned()
+            .next()
+            .with_context(|| format!("No tiles given!"))?;
+        queue.push_back(((0, 0), first));
+        assembled.insert(first);
+
+        'all: while let Some((pos, current_idx)) = queue.pop_front() {
+            eprintln!("Checking #{} at {:?}", current_idx, pos);
+            let current_tile = { pic.tiles.get(&current_idx).unwrap().borrow() };
+            let others: Vec<_> = pic
+                .tiles
+                .keys()
+                .filter(|idx| !assembled.contains(idx))
+                .cloned()
+                .collect();
+            'tiles: for other_idx in others.into_iter() {
+                let other_tile_rc = pic.tiles.get(&other_idx).unwrap();
+                for _ in 0..4 {
+                    'sides: for side in ORIENTATIONS.iter() {
+                        if pic.neighbor(pos, *side).is_some() {
+                            continue 'sides;
+                        }
+
+                        if pic.insert_if_match(pos, &current_tile, *side, *other_tile_rc) {
+                            queue.push_back((advance(pos, *side), other_idx));
+
+                            if pic.num_neighbors(pos) == 4 {
+                                continue 'all;
+                            } else {
+                                continue 'tiles;
+                            }
+                        }
+                    }
+                    other_tile.rotate();
+                }
+            }
+        }
+        let centered_grid = Self::center(pic.grid);
+        Ok(Self {
+            grid: centered_grid,
+            tiles: pic.tiles,
+        })
+    }
+
+    /// Check if tile_current and tile_other match on side. 
+    ///
+    /// Insert tile_other into grid if they do.
+    fn insert_if_match(&mut self, pos: Position, tile_current: &Tile, side: Orientation, tile_other: Rc<MutTile>) -> bool
+    {
+        let other_tile = tile_other.borrow();
+        let this_edge = tile_current.edge(side);
+        let other_edge = other_tile.edge(side.opposite());
+        if Tile::edge_match(&this_edge[..], &other_edge[..]) {
+            eprintln!(
+                "Found match between {} and {}",
+                tile_current.idx, tile_other.borrow().idx
+            );
+
+            let pos_neighbor = advance(pos, side);
+            eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
+            self.grid.insert(pos_neighbor, Rc::downgrade(tile_other));
+            assembled.insert(other_idx);
+            true
+        }
+        else {
+            false
+        }
+    }
+
+    fn center(map: HashMap<Position, Weak<MutTile>>) -> HashMap<Position, Weak<MutTile>> {
+        let x_min = map.keys().map(|k| k.0).min().unwrap();
+        let y_min = map.keys().map(|k| k.1).min().unwrap();
+        map.into_iter()
+            .map(|((x, y), v)| ((x - x_min, y - y_min), v))
+            .collect()
+    }
+
+    pub fn neighbor(&self, pos: Position, side: Orientation) -> Option<Weak<MutTile>> {
+        let pos_neighbor = advance(pos, side);
+        self.grid.get(&pos_neighbor).cloned()
+    }
+
+    pub fn num_neighbors(&self, pos: Position) -> usize {
+        ORIENTATIONS
+            .iter()
+            .filter(|o| self.neighbor(pos, **o).is_some())
+            .count()
     }
 }
