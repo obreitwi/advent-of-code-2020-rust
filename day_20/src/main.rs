@@ -21,8 +21,7 @@ use std::rc::{Rc, Weak};
 fn main() -> Result<()> {
     let input = PathBuf::from(
         env::args()
-            .skip(1)
-            .next()
+            .nth(1)
             .with_context(|| "No input provided!")?,
     );
 
