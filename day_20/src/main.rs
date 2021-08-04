@@ -48,6 +48,7 @@ fn part1(ts: TileSet) -> Result<Picture> {
     let adj = ts.adjacencies();
     eprintln!("{:#?}", adj);
 
+    // Corners are tiles with exactly to matching neighbors
     let corners: Vec<_> = adj
         .iter()
         .filter_map(|(idx, vec)| if vec.len() == 2 { Some(*idx) } else { None })
