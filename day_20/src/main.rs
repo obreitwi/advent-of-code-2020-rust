@@ -488,8 +488,8 @@ impl Picture {
     }
 
     fn center(map: HashMap<Position, Weak<MutTile>>) -> HashMap<Position, Weak<MutTile>> {
-        let x_min = map.keys().map(|k| k.0).min().unwrap_or(0);
-        let y_min = map.keys().map(|k| k.1).min().unwrap_or(0);
+        let x_min = map.keys().map(|k| k.0).min().expect("No tiles in map.");
+        let y_min = map.keys().map(|k| k.1).min().expect("No tiles in map.");
         map.into_iter()
             .map(|((x, y), v)| ((x - x_min, y - y_min), v))
             .collect()
