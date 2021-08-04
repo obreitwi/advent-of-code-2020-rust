@@ -370,7 +370,9 @@ impl TileSet {
                 }
 
                 if num_matches > 0 {
-                    rv.entry(tile.idx).or_insert_with(Vec::new).push(to_check.idx);
+                    rv.entry(tile.idx)
+                        .or_insert_with(Vec::new)
+                        .push(to_check.idx);
                 }
             }
         }
