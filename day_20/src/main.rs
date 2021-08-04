@@ -91,10 +91,10 @@ const ORIENTATIONS: [Orientation; 4] = [
     Orientation::West,
 ];
 
-impl Into<usize> for Orientation {
-    fn into(self) -> usize {
+impl From<Orientation> for usize {
+    fn from(o: Orientation) -> usize {
         use Orientation::*;
-        match self {
+        match o {
             North => 0,
             East => 1,
             South => 2,
