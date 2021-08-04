@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use anyhow::{bail, Context, Result};
 use nom::{
     branch::alt,
@@ -27,6 +28,8 @@ fn main() -> Result<()> {
 
     let tileset = TileSet::read_from(&input)?;
     let pic = part1(tileset)?;
+
+    eprintln!("{:#?}", pic);
 
     /*
      * let first = TileSet.tiles.values().next().unwrap();
@@ -117,7 +120,7 @@ impl Orientation {
 #[derive(Debug, Hash, PartialEq)]
 struct Tile {
     idx: usize,
-    data: Vec<char>,
+    data: Edge,
     size: usize,
     orientation: Orientation,
 }
@@ -127,9 +130,9 @@ impl fmt::Display for Tile {
         // The `f` value implements the `Write` trait, which is what the
         // write! macro is expecting. Note that this formatting ignores the
         // various flags provided to format strings.
-        write!(f, "Tile {}:\n", self.idx)?;
+        writeln!(f, "Tile {}:", self.idx)?;
         for line in self.lines().into_iter() {
-            write!(f, "{}\n", line)?;
+            writeln!(f, "{}", line)?;
         }
         Ok(())
     }
@@ -179,7 +182,7 @@ impl Tile {
         }
     }
 
-    fn edge(&self, side: Orientation) -> Vec<char> {
+    fn edge(&self, side: Orientation) -> Edge {
         use Orientation::*;
         match self.orientation {
             North => match side {
@@ -230,7 +233,7 @@ impl Tile {
         }
     }
 
-    fn edge_raw(&self, side: Orientation) -> Vec<char> {
+    fn edge_raw(&self, side: Orientation) -> Edge {
         use Orientation::*;
 
         match side {
@@ -259,14 +262,14 @@ impl Tile {
         }
     }
 
-    fn edges(&self) -> Vec<Vec<char>> {
+    fn edges(&self) -> Vec<Edge> {
         use Orientation::*;
-        let mut rv = Vec::with_capacity(4);
-        rv.push(self.edge(North));
-        rv.push(self.edge(East));
-        rv.push(self.edge(South));
-        rv.push(self.edge(West));
-        rv
+        vec![
+            self.edge(North),
+            self.edge(East),
+            self.edge(South),
+            self.edge(West),
+        ]
     }
 
     fn edge_match_approx(i: &[char], j: &[char]) -> bool {
@@ -320,7 +323,7 @@ impl fmt::Display for TileSet {
         // write! macro is expecting. Note that this formatting ignores the
         // various flags provided to format strings.
         for tile in self.tiles.values() {
-            write!(f, "{}\n", tile.borrow())?;
+            writeln!(f, "{}", tile.borrow())?;
         }
         Ok(())
     }
@@ -366,7 +369,7 @@ impl TileSet {
                 }
 
                 if num_matches > 0 {
-                    rv.entry(tile.idx).or_insert(Vec::new()).push(to_check.idx);
+                    rv.entry(tile.idx).or_insert_with(Vec::new).push(to_check.idx);
                 }
             }
         }
@@ -374,6 +377,7 @@ impl TileSet {
     }
 }
 
+type Edge = Vec<char>;
 type Position = (i64, i64);
 type MutTile = RefCell<Tile>;
 
@@ -408,13 +412,15 @@ impl Picture {
             .keys()
             .cloned()
             .next()
-            .with_context(|| format!("No tiles given!"))?;
+            .with_context(|| "No tiles given!")?;
         queue.push_back(((0, 0), first));
         assembled.insert(first);
 
         'all: while let Some((pos, current_idx)) = queue.pop_front() {
             eprintln!("Checking #{} at {:?}", current_idx, pos);
-            let current_tile = { pic.tiles.get(&current_idx).unwrap().borrow() };
+            let current_tile_rc = pic.tiles.get(&current_idx).unwrap().clone();
+            let current_tile = current_tile_rc.borrow();
+            #[allow(clippy::needless_collect)] // needed to borrow pic mutable later
             let others: Vec<_> = pic
                 .tiles
                 .keys()
@@ -422,14 +428,15 @@ impl Picture {
                 .cloned()
                 .collect();
             'tiles: for other_idx in others.into_iter() {
-                let other_tile_rc = pic.tiles.get(&other_idx).unwrap();
+                let other_tile_rc = pic.tiles.get(&other_idx).unwrap().clone();
                 for _ in 0..4 {
                     'sides: for side in ORIENTATIONS.iter() {
                         if pic.neighbor(pos, *side).is_some() {
                             continue 'sides;
                         }
 
-                        if pic.insert_if_match(pos, &current_tile, *side, *other_tile_rc) {
+                        if pic.insert_if_match(pos, &current_tile, *side, other_tile_rc.clone()) {
+                            assembled.insert(other_idx);
                             queue.push_back((advance(pos, *side), other_idx));
 
                             if pic.num_neighbors(pos) == 4 {
@@ -439,7 +446,7 @@ impl Picture {
                             }
                         }
                     }
-                    other_tile.rotate();
+                    other_tile_rc.borrow_mut().rotate();
                 }
             }
         }
@@ -450,34 +457,38 @@ impl Picture {
         })
     }
 
-    /// Check if tile_current and tile_other match on side. 
+    /// Check if tile_current and tile_other match on side.
     ///
     /// Insert tile_other into grid if they do.
-    fn insert_if_match(&mut self, pos: Position, tile_current: &Tile, side: Orientation, tile_other: Rc<MutTile>) -> bool
-    {
+    fn insert_if_match(
+        &mut self,
+        pos: Position,
+        tile_current: &Tile,
+        side: Orientation,
+        tile_other: Rc<MutTile>,
+    ) -> bool {
         let other_tile = tile_other.borrow();
         let this_edge = tile_current.edge(side);
         let other_edge = other_tile.edge(side.opposite());
         if Tile::edge_match(&this_edge[..], &other_edge[..]) {
             eprintln!(
                 "Found match between {} and {}",
-                tile_current.idx, tile_other.borrow().idx
+                tile_current.idx,
+                tile_other.borrow().idx
             );
 
             let pos_neighbor = advance(pos, side);
             eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
-            self.grid.insert(pos_neighbor, Rc::downgrade(tile_other));
-            assembled.insert(other_idx);
+            self.grid.insert(pos_neighbor, Rc::downgrade(&tile_other));
             true
-        }
-        else {
+        } else {
             false
         }
     }
 
     fn center(map: HashMap<Position, Weak<MutTile>>) -> HashMap<Position, Weak<MutTile>> {
-        let x_min = map.keys().map(|k| k.0).min().unwrap();
-        let y_min = map.keys().map(|k| k.1).min().unwrap();
+        let x_min = map.keys().map(|k| k.0).min().unwrap_or(0);
+        let y_min = map.keys().map(|k| k.1).min().unwrap_or(0);
         map.into_iter()
             .map(|((x, y), v)| ((x - x_min, y - y_min), v))
             .collect()
