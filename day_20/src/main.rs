@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     let pic = part1(tileset)?;
 
-    eprintln!("{:#?}", pic);
+    // eprintln!("{:#?}", pic);
 
     /*
      * let first = TileSet.tiles.values().next().unwrap();
@@ -415,9 +415,9 @@ fn advance(pos: Position, side: Orientation) -> Position {
     use Orientation::*;
     let (x, y) = pos;
     match side {
-        North => (x, y + 1),
+        North => (x, y - 1),
         East => (x + 1, y),
-        South => (x, y - 1),
+        South => (x, y + 1),
         West => (x - 1, y),
     }
 }
@@ -431,7 +431,7 @@ struct Picture {
 
 impl Picture {
     fn assemble(tileset: TileSet) -> Result<Self> {
-        let mut assembled: HashSet<usize> = HashSet::new();
+        let mut to_assemble: HashSet<usize> = tileset.tiles.keys().cloned().collect();
         let mut pic = {
             let grid = HashMap::new();
             let tiles = tileset.tiles;
@@ -445,35 +445,29 @@ impl Picture {
         };
 
         let mut queue: VecDeque<(Position, usize)> = VecDeque::new();
-        let first = pic
-            .tiles
-            .keys()
-            .cloned()
+        let first = to_assemble
+            .iter()
             .next()
+            .cloned()
             .with_context(|| "No tiles given!")?;
         eprintln!("Inserting #{} at {:?}", first, (0, 0));
         queue.push_back(((0, 0), first));
-        assembled.insert(first);
+        pic.grid
+            .insert((0, 0), Rc::downgrade(pic.tiles.get(&first).unwrap()));
+        to_assemble.remove(&first);
 
         'all: while let Some((pos, current_idx)) = queue.pop_front() {
             eprintln!("Checking #{} at {:?}", current_idx, pos);
             let current_tile_rc = pic.tiles.get(&current_idx).unwrap();
             let current_tile = current_tile_rc.borrow();
-            #[allow(clippy::needless_collect)] // needed to borrow pic mutable later
-            let others: Vec<_> = pic
-                .tiles
-                .keys()
-                .filter(|idx| !assembled.contains(idx))
-                .cloned()
-                .collect();
-            eprintln!("others: {:#?}", others);
+            eprintln!("Left to assemble: {:?}", to_assemble);
             'sides: for side in ORIENTATIONS.iter() {
                 if pic.neighbor(pos, *side).is_some() {
                     eprintln!("Neighbor from {:?} in {:?} direction exists.", pos, *side);
                     continue 'sides;
                 }
-                'tiles: for other_idx in others.iter() {
-                    let other_tile_rc = pic.tiles.get(other_idx).unwrap();
+                'tiles: for other_idx in to_assemble.iter().cloned().collect::<Vec<_>>() {
+                    let other_tile_rc = pic.tiles.get(&other_idx).unwrap();
                     for idx_try in 0..ORIENTATIONS.len() * 2 {
                         {
                             let other_tile = other_tile_rc.borrow();
@@ -481,12 +475,12 @@ impl Picture {
                             eprintln!("Other:\n{}", &other_tile);
 
                             if Tile::check_match(&current_tile, *side, &other_tile) {
-                                assembled.insert(*other_idx);
+                                to_assemble.remove(&other_idx);
 
                                 let pos_neighbor = advance(pos, *side);
                                 eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
                                 pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
-                                queue.push_back((pos_neighbor, *other_idx));
+                                queue.push_back((pos_neighbor, other_idx));
 
                                 let num_neighbors = pic.num_neighbors(pos);
                                 eprintln!("Currently there are {} neighbors.", num_neighbors);
@@ -589,8 +583,7 @@ impl Picture {
 mod tests {
     use super::*;
 
-    fn get_debug_tiles() -> Result<TileSet>
-    {
+    fn get_debug_tiles() -> Result<TileSet> {
         use Orientation::*;
         TileSet::read_from(&PathBuf::from("debug-single.txt"))
     }
@@ -625,7 +618,10 @@ mod tests {
         let tile1 = ts.tiles.get(&1337).unwrap().borrow();
         let tile2 = ts.tiles.get(&1338).unwrap().borrow();
 
-        assert!(Tile::edge_match(&tile1.edge(West), &tile2.edge(West)), "Edges not the same.");
+        assert!(
+            Tile::edge_match(&tile1.edge(West), &tile2.edge(West)),
+            "Edges not the same."
+        );
         Ok(())
     }
 
@@ -641,11 +637,17 @@ mod tests {
 
         eprintln!("{}", tile2);
 
-        assert!(Tile::check_match(&tile1, West, &tile2), "Edges not the same.");
+        assert!(
+            Tile::check_match(&tile1, West, &tile2),
+            "Edges not the same."
+        );
 
         tile1.rotate();
         tile2.rotate();
-        assert!(Tile::check_match(&tile1, North, &tile2), "Edges not the same.");
+        assert!(
+            Tile::check_match(&tile1, North, &tile2),
+            "Edges not the same."
+        );
 
         Ok(())
     }
