@@ -328,15 +328,7 @@ impl Tile {
     pub fn check_match(tile_current: &Tile, side: Orientation, tile_other: &Tile) -> bool {
         let this_edge = tile_current.edge(side);
         let other_edge = tile_other.edge(side.opposite());
-        if Tile::edge_match(&this_edge[..], &other_edge[..]) {
-            eprintln!(
-                "Found match between {} and {}",
-                tile_current.idx, tile_other.idx
-            );
-            true
-        } else {
-            false
-        }
+        Tile::edge_match(&this_edge[..], &other_edge[..])
     }
 }
 
