@@ -437,32 +437,45 @@ impl Picture {
                 .cloned()
                 .collect();
             eprintln!("others: {:#?}", others);
-            'tiles: for other_idx in others.into_iter() {
-                let other_tile_rc = pic.tiles.get(&other_idx).unwrap();
-                for idx_try in 0..ORIENTATIONS.len() * 2 {
-                    eprintln!("Current:\n{}", current_tile);
-                    eprintln!("Other:\n{}", other_tile_rc.borrow());
-                    'sides: for side in ORIENTATIONS.iter() {
-                        if pic.neighbor(pos, *side).is_some() {
-                            continue 'sides;
-                        }
+            'sides: for side in ORIENTATIONS.iter() {
+                if pic.neighbor(pos, *side).is_some() {
+                    eprintln!("Neighbor from {:?} in {:?} direction exists.", pos, *side);
+                    continue 'sides;
+                }
+                'tiles: for other_idx in others.iter() {
+                    let other_tile_rc = pic.tiles.get(other_idx).unwrap();
+                    for idx_try in 0..ORIENTATIONS.len() * 2 {
+                        {
+                            let other_tile = other_tile_rc.borrow();
+                            eprintln!("Current:\n{}", current_tile);
+                            eprintln!("Other:\n{}", &other_tile);
 
-                        if pic.check_match(&current_tile, *side, &other_tile_rc.borrow()) {
-                            assembled.insert(other_idx);
+                            if pic.check_match(&current_tile, *side, &other_tile) {
+                                assembled.insert(*other_idx);
 
-                            let pos_neighbor = advance(pos, *side);
-                            eprintln!(
-                                "Inserting #{} at {:?}",
-                                other_tile_rc.borrow().idx,
-                                pos_neighbor
-                            );
-                            pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
-                            queue.push_back((pos_neighbor, other_idx));
+                                let pos_neighbor = advance(pos, *side);
+                                eprintln!(
+                                    "Inserting #{} at {:?}",
+                                    other_tile.idx,
+                                    pos_neighbor
+                                );
+                                pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
+                                queue.push_back((pos_neighbor, *other_idx));
 
-                            if pic.num_neighbors(pos) == 4 {
-                                continue 'all;
+                                if pic.num_neighbors(pos) == 4 {
+                                    continue 'all;
+                                } else {
+                                    continue 'tiles;
+                                }
                             } else {
-                                continue 'tiles;
+                                eprintln!("No match found.");
+                            }
+                        }
+                        {
+                            let mut other_tile = other_tile_rc.borrow_mut();
+                            other_tile.rotate();
+                            if idx_try == ORIENTATIONS.len() - 1 {
+                                other_tile.flip();
                             }
                         }
                     }
