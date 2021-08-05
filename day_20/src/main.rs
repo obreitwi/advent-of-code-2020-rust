@@ -50,10 +50,6 @@ fn part1(ts: TileSet) -> Result<Picture> {
         .filter_map(|(idx, vec)| if vec.len() == 2 { Some(*idx) } else { None })
         .collect();
 
-    println!("{:?}", corners);
-    let corners_prod = corners.iter().cloned().product::<usize>();
-    println!("{}", corners_prod);
-
     let pic = Picture::assemble(ts)?;
     let corners_assembled: Vec<_> = pic
         .grid
@@ -66,9 +62,18 @@ fn part1(ts: TileSet) -> Result<Picture> {
             }
         })
         .collect();
+
+    println!("Corners regular: {:?}", corners);
+    let corners_prod = corners.iter().cloned().product::<usize>();
+    println!("{}", corners_prod);
+
     println!("Corners assembled: {:?}", corners_assembled);
     let corners_assembled_prod = corners_assembled.iter().cloned().product::<usize>();
     println!("Corners assembled product: {}", corners_assembled_prod);
+
+    println!("Grid positions:\n{:?}", pic.grid.keys().collect::<Vec<_>>());
+
+    pic.print_grid()?;
 
     assert_eq!(
         corners_prod, corners_assembled_prod,
@@ -316,6 +321,23 @@ impl Tile {
         }
         rv
     }
+
+    /// Check if tile_current and tile_other match on side.
+    ///
+    /// Insert tile_other into grid if they do.
+    pub fn check_match(tile_current: &Tile, side: Orientation, tile_other: &Tile) -> bool {
+        let this_edge = tile_current.edge(side);
+        let other_edge = tile_other.edge(side.opposite());
+        if Tile::edge_match(&this_edge[..], &other_edge[..]) {
+            eprintln!(
+                "Found match between {} and {}",
+                tile_current.idx, tile_other.idx
+            );
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -404,15 +426,23 @@ fn advance(pos: Position, side: Orientation) -> Position {
 struct Picture {
     tiles: HashMap<usize, Rc<MutTile>>,
     grid: HashMap<Position, Weak<MutTile>>,
+    size: usize,
 }
 
 impl Picture {
     fn assemble(tileset: TileSet) -> Result<Self> {
-        let tiles = tileset.tiles;
-        let grid = HashMap::new();
         let mut assembled: HashSet<usize> = HashSet::new();
-
-        let mut pic = Self { grid, tiles };
+        let mut pic = {
+            let grid = HashMap::new();
+            let tiles = tileset.tiles;
+            let size = tiles
+                .values()
+                .next()
+                .with_context(|| "No tiles supplied.")?
+                .borrow()
+                .size;
+            Self { grid, tiles, size }
+        };
 
         let mut queue: VecDeque<(Position, usize)> = VecDeque::new();
         let first = pic
@@ -450,17 +480,16 @@ impl Picture {
                             eprintln!("Current:\n{}", current_tile);
                             eprintln!("Other:\n{}", &other_tile);
 
-                            if pic.check_match(&current_tile, *side, &other_tile) {
+                            if Tile::check_match(&current_tile, *side, &other_tile) {
                                 assembled.insert(*other_idx);
 
                                 let pos_neighbor = advance(pos, *side);
-                                eprintln!(
-                                    "Inserting #{} at {:?}",
-                                    other_tile.idx,
-                                    pos_neighbor
-                                );
+                                eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
                                 pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
                                 queue.push_back((pos_neighbor, *other_idx));
+
+                                let num_neighbors = pic.num_neighbors(pos);
+                                eprintln!("Currently there are {} neighbors.", num_neighbors);
 
                                 if pic.num_neighbors(pos) == 4 {
                                     continue 'all;
@@ -479,37 +508,10 @@ impl Picture {
                             }
                         }
                     }
-                    let mut other_tile = other_tile_rc.borrow_mut();
-                    other_tile.rotate();
-                    if idx_try == ORIENTATIONS.len() - 1 {
-                        other_tile.flip();
-                    }
                 }
             }
         }
-        let centered_grid = Self::center(pic.grid);
-        Ok(Self {
-            grid: centered_grid,
-            tiles: pic.tiles,
-        })
-    }
-
-    /// Check if tile_current and tile_other match on side.
-    ///
-    /// Insert tile_other into grid if they do.
-    fn check_match(&self, tile_current: &Tile, side: Orientation, tile_other: &Tile) -> bool {
-        let other_tile = tile_other;
-        let this_edge = tile_current.edge(side);
-        let other_edge = other_tile.edge(side.opposite());
-        if Tile::edge_match(&this_edge[..], &other_edge[..]) {
-            eprintln!(
-                "Found match between {} and {}",
-                tile_current.idx, tile_other.idx
-            );
-            true
-        } else {
-            false
-        }
+        Ok(pic)
     }
 
     fn center(map: HashMap<Position, Weak<MutTile>>) -> HashMap<Position, Weak<MutTile>> {
@@ -531,16 +533,72 @@ impl Picture {
             .filter(|o| self.neighbor(pos, **o).is_some())
             .count()
     }
+
+    pub fn print_grid(&self) -> Result<()> {
+        let x_min = self
+            .grid
+            .keys()
+            .map(|k| k.0)
+            .min()
+            .expect("No tiles in map.");
+        let y_min = self
+            .grid
+            .keys()
+            .map(|k| k.1)
+            .min()
+            .expect("No tiles in map.");
+        let x_max = self
+            .grid
+            .keys()
+            .map(|k| k.0)
+            .max()
+            .expect("No tiles in map.");
+        let y_max = self
+            .grid
+            .keys()
+            .map(|k| k.1)
+            .max()
+            .expect("No tiles in map.");
+
+        for y in y_min..y_max + 1 {
+            for j in 0..self.size {
+                for x in x_min..x_max + 1 {
+                    match self.grid.get(&(x, y)) {
+                        None => print!("{:X<1$}", "", self.size),
+                        Some(tile) => print!(
+                            "{}",
+                            tile.upgrade()
+                                .with_context(|| format!("Could not upgrade tile at {:?}", (x, y)))?
+                                .borrow()
+                                .row(j)
+                                .iter()
+                                .collect::<String>()
+                        ),
+                    }
+                    print!(" ");
+                }
+                println!();
+            }
+            println!();
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn get_debug_tiles() -> Result<TileSet>
+    {
+        use Orientation::*;
+        TileSet::read_from(&PathBuf::from("debug-single.txt"))
+    }
+
     #[test]
     fn rotation_test() -> Result<()> {
         use Orientation::*;
-        let ts = TileSet::read_from(&PathBuf::from("debug-single.txt"))?;
+        let ts = get_debug_tiles()?;
         let mut tile = ts.tiles.get(&1337).unwrap().borrow_mut().clone();
 
         for _ in 0..2 {
@@ -556,6 +614,39 @@ mod tests {
             eprintln!("Flipping!");
             tile.flip();
         }
+        Ok(())
+    }
+
+    #[test]
+    fn match_edges() -> Result<()> {
+        use Orientation::*;
+        let ts = get_debug_tiles()?;
+
+        let tile1 = ts.tiles.get(&1337).unwrap().borrow();
+        let tile2 = ts.tiles.get(&1338).unwrap().borrow();
+
+        assert!(Tile::edge_match(&tile1.edge(West), &tile2.edge(West)), "Edges not the same.");
+        Ok(())
+    }
+
+    #[test]
+    fn check_matches() -> Result<()> {
+        use Orientation::*;
+        let ts = get_debug_tiles()?;
+
+        let mut tile1 = ts.tiles.get(&1337).unwrap().borrow_mut();
+        let mut tile2 = ts.tiles.get(&1338).unwrap().borrow_mut();
+        tile2.rotate();
+        tile2.rotate();
+
+        eprintln!("{}", tile2);
+
+        assert!(Tile::check_match(&tile1, West, &tile2), "Edges not the same.");
+
+        tile1.rotate();
+        tile2.rotate();
+        assert!(Tile::check_match(&tile1, North, &tile2), "Edges not the same.");
+
         Ok(())
     }
 }
