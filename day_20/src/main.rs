@@ -25,6 +25,8 @@ fn main() -> Result<()> {
 
     let pic = part1(tileset)?;
 
+    part2(pic)?;
+
     // eprintln!("{:#?}", pic);
 
     /*
@@ -42,7 +44,7 @@ fn main() -> Result<()> {
 
 fn part1(ts: TileSet) -> Result<Picture> {
     let adj = ts.adjacencies();
-    eprintln!("{:#?}", adj);
+    // eprintln!("{:#?}", adj);
 
     // Corners are tiles with exactly to matching neighbors
     let corners: Vec<_> = adj
@@ -63,15 +65,15 @@ fn part1(ts: TileSet) -> Result<Picture> {
         })
         .collect();
 
-    println!("Corners regular: {:?}", corners);
+    // println!("Corners regular: {:?}", corners);
     let corners_prod = corners.iter().cloned().product::<usize>();
-    println!("{}", corners_prod);
+    // println!("{}", corners_prod);
 
-    println!("Corners assembled: {:?}", corners_assembled);
+    // println!("Corners assembled: {:?}", corners_assembled);
     let corners_assembled_prod = corners_assembled.iter().cloned().product::<usize>();
-    println!("Corners assembled product: {}", corners_assembled_prod);
+    // println!("Corners assembled product: {}", corners_assembled_prod);
 
-    println!("Grid positions:\n{:?}", pic.grid.keys().collect::<Vec<_>>());
+    // println!("Grid positions:\n{:?}", pic.grid.keys().collect::<Vec<_>>());
 
     pic.print_grid()?;
 
@@ -81,6 +83,12 @@ fn part1(ts: TileSet) -> Result<Picture> {
     );
 
     Ok(pic)
+}
+
+fn part2(pic: Picture) -> Result<()> {
+    let borderless = BorderlessPicture::from(&pic);
+    println!("{}", borderless);
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Hash, Clone, Copy)]
@@ -421,6 +429,69 @@ struct Picture {
     size: usize,
 }
 
+#[derive(Debug)]
+struct BorderlessPicture {
+    data: Edge,
+    size: usize,
+}
+
+impl fmt::Display for BorderlessPicture {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for line in self.data[..].chunks(self.size) {
+            writeln!(f, "{}", line.iter().collect::<String>())?;
+        }
+        Ok(())
+    }
+}
+
+impl From<&Picture> for BorderlessPicture {
+    fn from(pic: &Picture) -> BorderlessPicture {
+        let dim = pic.dimensions().expect("Could not compute dimensions.");
+
+        let num_y = dim.y_max - dim.y_min + 1;
+        let num_x = dim.x_max - dim.x_min + 1;
+
+        assert_eq!(num_x, num_y, "Dimensions not the same.");
+
+        let reduced_size = pic.size - 2;
+        let size = reduced_size * num_x as usize;
+
+        let mut data = Vec::with_capacity(size * size);
+
+        for y in dim.y_min..dim.y_max + 1 {
+            for j in 1..pic.size - 1 {
+                for x in dim.x_min..dim.x_max + 1 {
+                    match pic.grid.get(&(x, y)) {
+                        None => {
+                            panic!("Grid not filled!");
+                        }
+                        Some(tile) => data.extend(
+                            tile.upgrade()
+                                .unwrap_or_else(|| panic!("Could not upgrade tile at {:?}", (x, y)))
+                                .borrow()
+                                .row(j)
+                                .into_iter()
+                                .skip(1)
+                                .take(reduced_size),
+                        ),
+                    }
+                }
+            }
+        }
+
+        assert_eq!(data.len(), size * size);
+
+        BorderlessPicture { data, size }
+    }
+}
+
+struct Dimensions {
+    x_min: i64,
+    x_max: i64,
+    y_min: i64,
+    y_max: i64,
+}
+
 impl Picture {
     fn assemble(tileset: TileSet) -> Result<Self> {
         let mut to_assemble: HashSet<usize> = tileset.tiles.keys().cloned().collect();
@@ -442,20 +513,20 @@ impl Picture {
             .next()
             .cloned()
             .with_context(|| "No tiles given!")?;
-        eprintln!("Inserting #{} at {:?}", first, (0, 0));
+        // eprintln!("Inserting #{} at {:?}", first, (0, 0));
         queue.push_back(((0, 0), first));
         pic.grid
             .insert((0, 0), Rc::downgrade(pic.tiles.get(&first).unwrap()));
         to_assemble.remove(&first);
 
         'all: while let Some((pos, current_idx)) = queue.pop_front() {
-            eprintln!("Checking #{} at {:?}", current_idx, pos);
+            // eprintln!("Checking #{} at {:?}", current_idx, pos);
             let current_tile_rc = pic.tiles.get(&current_idx).unwrap();
             let current_tile = current_tile_rc.borrow();
-            eprintln!("Left to assemble: {:?}", to_assemble);
+            // eprintln!("Left to assemble: {:?}", to_assemble);
             'sides: for side in ORIENTATIONS.iter() {
                 if pic.neighbor(pos, *side).is_some() {
-                    eprintln!("Neighbor from {:?} in {:?} direction exists.", pos, *side);
+                    // eprintln!("Neighbor from {:?} in {:?} direction exists.", pos, *side);
                     continue 'sides;
                 }
                 'tiles: for other_idx in to_assemble.iter().cloned().collect::<Vec<_>>() {
@@ -463,19 +534,19 @@ impl Picture {
                     for idx_try in 0..ORIENTATIONS.len() * 2 {
                         {
                             let other_tile = other_tile_rc.borrow();
-                            eprintln!("Current:\n{}", current_tile);
-                            eprintln!("Other:\n{}", &other_tile);
+                            // eprintln!("Current:\n{}", current_tile);
+                            // eprintln!("Other:\n{}", &other_tile);
 
                             if Tile::check_match(&current_tile, *side, &other_tile) {
                                 to_assemble.remove(&other_idx);
 
                                 let pos_neighbor = advance(pos, *side);
-                                eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
+                                // eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
                                 pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
                                 queue.push_back((pos_neighbor, other_idx));
 
-                                let num_neighbors = pic.num_neighbors(pos);
-                                eprintln!("Currently there are {} neighbors.", num_neighbors);
+                                // let num_neighbors = pic.num_neighbors(pos);
+                                // eprintln!("Currently there are {} neighbors.", num_neighbors);
 
                                 if pic.num_neighbors(pos) == 4 {
                                     continue 'all;
@@ -483,7 +554,7 @@ impl Picture {
                                     continue 'tiles;
                                 }
                             } else {
-                                eprintln!("No match found.");
+                                // eprintln!("No match found.");
                             }
                         }
                         {
@@ -520,7 +591,7 @@ impl Picture {
             .count()
     }
 
-    pub fn print_grid(&self) -> Result<()> {
+    fn dimensions(&self) -> Result<Dimensions> {
         let x_min = self
             .grid
             .keys()
@@ -546,9 +617,20 @@ impl Picture {
             .max()
             .expect("No tiles in map.");
 
-        for y in y_min..y_max + 1 {
+        Ok(Dimensions {
+            x_min,
+            x_max,
+            y_min,
+            y_max,
+        })
+    }
+
+    pub fn print_grid(&self) -> Result<()> {
+        let dim = self.dimensions()?;
+
+        for y in dim.y_min..dim.y_max + 1 {
             for j in 0..self.size {
-                for x in x_min..x_max + 1 {
+                for x in dim.x_min..dim.x_max + 1 {
                     match self.grid.get(&(x, y)) {
                         None => print!("{:X<1$}", "", self.size),
                         Some(tile) => print!(
