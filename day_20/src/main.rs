@@ -20,42 +20,23 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 fn main() -> Result<()> {
-    let first_arg = env::args().nth(1).with_context(|| "No input provided!")?;
-    let input = PathBuf::from(&first_arg);
+    let input = PathBuf::from(env::args().nth(1).with_context(|| "No input provided!")?);
     let tileset = TileSet::read_from(&input)?;
 
-    if first_arg == "debug-single.txt" {
-        debug(tileset);
-    } else {
-        let pic = part1(tileset)?;
+    let pic = part1(tileset)?;
 
-        eprintln!("{:#?}", pic);
+    eprintln!("{:#?}", pic);
 
-        /*
-         * let first = TileSet.tiles.values().next().unwrap();
-         * eprintln!("{:?}", first.edge_n());
-         * eprintln!("{:?}", first.edge_e());
-         * eprintln!("{:?}", first.edge_s());
-         * eprintln!("{:?}", first.edge_w());
-         */
+    /*
+     * let first = TileSet.tiles.values().next().unwrap();
+     * eprintln!("{:?}", first.edge_n());
+     * eprintln!("{:?}", first.edge_e());
+     * eprintln!("{:?}", first.edge_s());
+     * eprintln!("{:?}", first.edge_w());
+     */
 
-        // eprintln!("{}", TileSet);
-    }
+    // eprintln!("{}", TileSet);
 
-    Ok(())
-}
-
-fn debug(ts: TileSet) -> Result<()> {
-    let mut tile = ts.tiles.get(&1337).unwrap().borrow_mut().clone();
-
-    for _ in 0..2 {
-        for _ in 0..ORIENTATIONS.len()
-        {
-            eprintln!("{}", tile);
-            tile.rotate();
-        }
-        tile.flip()
-    }
     Ok(())
 }
 
@@ -204,7 +185,6 @@ impl Tile {
         }
     }
 
-    #[allow(dead_code)]
     pub fn column(&self, idx: usize) -> Edge {
         assert!(idx < self.size, "Invalid column access in #{}", idx);
         use Orientation::*;
@@ -221,9 +201,29 @@ impl Tile {
         use Orientation::*;
         match self.orientation {
             North => self.row_with_flipped(idx),
+            //  >N>
+            // v   v
+            // W   E
+            // v   v
+            //  >S>
             East => reverse(self.column_with_flipped(idx)),
+            //  <W<
+            // v   v
+            // S   N
+            // v   v
+            //  <E<
             South => reverse(self.row_with_flipped(self.size - 1 - idx)),
+            //   <S<
+            //  ^   ^
+            //  E   W
+            //  ^   ^
+            //   <N<
             West => self.column_with_flipped(self.size - 1 - idx),
+            //  >E>
+            // ^   ^
+            // N   S
+            // ^   ^
+            //  >W>
         }
     }
 
@@ -266,63 +266,11 @@ impl Tile {
 
     fn edge(&self, side: Orientation) -> Edge {
         use Orientation::*;
-        match self.orientation {
-            North => match side {
-                //  >N>
-                // v   v
-                // W   E
-                // v   v
-                //  >S>
-                North => self.edge_from_data(North),
-                East => self.edge_from_data(East),
-                South => self.edge_from_data(South),
-                West => self.edge_from_data(West),
-            },
-
-            East => match side {
-                //  <W<
-                // v   v
-                // S   N
-                // v   v
-                //  <E<
-                North => reverse(self.edge_from_data(West)),
-                East => self.edge_from_data(North),
-                South => reverse(self.edge_from_data(East)),
-                West => self.edge_from_data(South),
-            },
-            South => match side {
-                //   <S<
-                //  ^   ^
-                //  E   W
-                //  ^   ^
-                //   <N<
-                North => reverse(self.edge_from_data(South)),
-                East => reverse(self.edge_from_data(West)),
-                South => reverse(self.edge_from_data(North)),
-                West => reverse(self.edge_from_data(East)),
-            },
-            West => match side {
-                //  >E>
-                // ^   ^
-                // N   S
-                // ^   ^
-                //  >W>
-                North => self.edge_from_data(East),
-                East => reverse(self.edge_from_data(South)),
-                South => self.edge_from_data(West),
-                West => reverse(self.edge_from_data(North)),
-            },
-        }
-    }
-
-    fn edge_from_data(&self, side: Orientation) -> Edge {
-        use Orientation::*;
-
         match side {
-            North => self.row_from_data(0),
-            East => self.column_from_data(self.size - 1),
-            South => self.row_from_data(self.size - 1),
-            West => self.column_from_data(0),
+            North => self.row(0),
+            East => self.column(self.size - 1),
+            South => self.row(self.size - 1),
+            West => self.column(0),
         }
     }
 
@@ -569,5 +517,32 @@ impl Picture {
             .iter()
             .filter(|o| self.neighbor(pos, **o).is_some())
             .count()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rotation_test() -> Result<()> {
+        use Orientation::*;
+        let ts = TileSet::read_from(&PathBuf::from("debug-single.txt"))?;
+        let mut tile = ts.tiles.get(&1337).unwrap().borrow_mut().clone();
+
+        for _ in 0..2 {
+            for _ in 0..ORIENTATIONS.len() {
+                eprintln!("Orientation: {:?}", tile.orientation);
+                eprintln!("{}", tile);
+                assert_eq!(tile.edge(North), tile.row(0));
+                assert_eq!(tile.edge(South), tile.row(tile.size - 1));
+                assert_eq!(tile.edge(West), tile.column(0));
+                assert_eq!(tile.edge(East), tile.column(tile.size - 1));
+                tile.rotate();
+            }
+            eprintln!("Flipping!");
+            tile.flip();
+        }
+        Ok(())
     }
 }
