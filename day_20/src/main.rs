@@ -20,27 +20,42 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 fn main() -> Result<()> {
-    let input = PathBuf::from(
-        env::args()
-            .nth(1)
-            .with_context(|| "No input provided!")?,
-    );
-
+    let first_arg = env::args().nth(1).with_context(|| "No input provided!")?;
+    let input = PathBuf::from(&first_arg);
     let tileset = TileSet::read_from(&input)?;
-    let pic = part1(tileset)?;
 
-    eprintln!("{:#?}", pic);
+    if first_arg == "debug-single.txt" {
+        debug(tileset);
+    } else {
+        let pic = part1(tileset)?;
 
-    /*
-     * let first = TileSet.tiles.values().next().unwrap();
-     * eprintln!("{:?}", first.edge_n());
-     * eprintln!("{:?}", first.edge_e());
-     * eprintln!("{:?}", first.edge_s());
-     * eprintln!("{:?}", first.edge_w());
-     */
+        eprintln!("{:#?}", pic);
 
-    // eprintln!("{}", TileSet);
+        /*
+         * let first = TileSet.tiles.values().next().unwrap();
+         * eprintln!("{:?}", first.edge_n());
+         * eprintln!("{:?}", first.edge_e());
+         * eprintln!("{:?}", first.edge_s());
+         * eprintln!("{:?}", first.edge_w());
+         */
 
+        // eprintln!("{}", TileSet);
+    }
+
+    Ok(())
+}
+
+fn debug(ts: TileSet) -> Result<()> {
+    let mut tile = ts.tiles.get(&1337).unwrap().borrow_mut().clone();
+
+    for _ in 0..2 {
+        for _ in 0..ORIENTATIONS.len()
+        {
+            eprintln!("{}", tile);
+            tile.rotate();
+        }
+        tile.flip()
+    }
     Ok(())
 }
 
@@ -70,11 +85,14 @@ fn part1(ts: TileSet) -> Result<Picture> {
             }
         })
         .collect();
-    println!("{:?}", corners_assembled);
+    println!("Corners assembled: {:?}", corners_assembled);
     let corners_assembled_prod = corners_assembled.iter().cloned().product::<usize>();
-    println!("{}", corners_assembled_prod);
+    println!("Corners assembled product: {}", corners_assembled_prod);
 
-    assert_eq!(corners_prod, corners_assembled_prod);
+    assert_eq!(
+        corners_prod, corners_assembled_prod,
+        "New way of assembling image does not lead to the same corners!"
+    );
 
     Ok(pic)
 }
@@ -118,19 +136,17 @@ impl Orientation {
     }
 }
 
-#[derive(Debug, Hash, PartialEq)]
+#[derive(Debug, Hash, PartialEq, Clone)]
 struct Tile {
     idx: usize,
     data: Edge,
     size: usize,
     orientation: Orientation,
+    flipped: bool,
 }
 
 impl fmt::Display for Tile {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // The `f` value implements the `Write` trait, which is what the
-        // write! macro is expecting. Note that this formatting ignores the
-        // various flags provided to format strings.
         writeln!(f, "Tile {}:", self.idx)?;
         for line in self.lines().into_iter() {
             writeln!(f, "{}", line)?;
@@ -169,8 +185,13 @@ impl Tile {
                 size,
                 data,
                 orientation: Orientation::North,
+                flipped: false,
             },
         ))
+    }
+
+    fn flip(&mut self) {
+        self.flipped = !self.flipped;
     }
 
     fn rotate(&mut self) {
@@ -183,6 +204,66 @@ impl Tile {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn column(&self, idx: usize) -> Edge {
+        assert!(idx < self.size, "Invalid column access in #{}", idx);
+        use Orientation::*;
+        match self.orientation {
+            North => self.column_with_flipped(idx),
+            East => self.row_with_flipped(self.size - 1 - idx),
+            South => reverse(self.column_with_flipped(self.size - 1 - idx)),
+            West => reverse(self.row_with_flipped(idx)),
+        }
+    }
+
+    pub fn row(&self, idx: usize) -> Edge {
+        assert!(idx < self.size, "Invalid row access in #{}", idx);
+        use Orientation::*;
+        match self.orientation {
+            North => self.row_with_flipped(idx),
+            East => reverse(self.column_with_flipped(idx)),
+            South => reverse(self.row_with_flipped(self.size - 1 - idx)),
+            West => self.column_with_flipped(self.size - 1 - idx),
+        }
+    }
+
+    fn column_with_flipped(&self, idx: usize) -> Edge {
+        let col = self.column_from_data(idx);
+        match self.flipped {
+            true => reverse(col),
+            false => col,
+        }
+    }
+
+    fn row_with_flipped(&self, idx: usize) -> Edge {
+        match self.flipped {
+            false => self.row_from_data(idx),
+            true => self.row_from_data(self.size - 1 - idx),
+        }
+    }
+
+    fn column_from_data(&self, idx: usize) -> Edge {
+        let mut c = 0;
+        self.data
+            .iter()
+            .skip(idx)
+            .filter(|_| {
+                c += 1;
+                c % self.size == 1 // 1 because we want the first to be retained
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn row_from_data(&self, idx: usize) -> Edge {
+        self.data
+            .iter()
+            .skip(idx * self.size)
+            .take(self.size)
+            .cloned()
+            .collect()
+    }
+
     fn edge(&self, side: Orientation) -> Edge {
         use Orientation::*;
         match self.orientation {
@@ -192,10 +273,10 @@ impl Tile {
                 // W   E
                 // v   v
                 //  >S>
-                North => self.edge_raw(North),
-                East => self.edge_raw(East),   //
-                South => self.edge_raw(South), //
-                West => self.edge_raw(West),   //
+                North => self.edge_from_data(North),
+                East => self.edge_from_data(East),
+                South => self.edge_from_data(South),
+                West => self.edge_from_data(West),
             },
 
             East => match side {
@@ -204,10 +285,10 @@ impl Tile {
                 // S   N
                 // v   v
                 //  <E<
-                North => reverse(self.edge_raw(West)),
-                East => self.edge_raw(North),
-                South => reverse(self.edge_raw(East)),
-                West => self.edge_raw(South),
+                North => reverse(self.edge_from_data(West)),
+                East => self.edge_from_data(North),
+                South => reverse(self.edge_from_data(East)),
+                West => self.edge_from_data(South),
             },
             South => match side {
                 //   <S<
@@ -215,51 +296,33 @@ impl Tile {
                 //  E   W
                 //  ^   ^
                 //   <N<
-                North => reverse(self.edge_raw(South)),
-                East => reverse(self.edge_raw(West)),
-                South => reverse(self.edge_raw(North)),
-                West => reverse(self.edge_raw(East)),
+                North => reverse(self.edge_from_data(South)),
+                East => reverse(self.edge_from_data(West)),
+                South => reverse(self.edge_from_data(North)),
+                West => reverse(self.edge_from_data(East)),
             },
             West => match side {
-                //  <S<
+                //  >E>
                 // ^   ^
-                // E   W
+                // N   S
                 // ^   ^
-                //  <N<
-                North => self.edge_raw(East),
-                East => reverse(self.edge_raw(South)),
-                South => self.edge_raw(West),
-                West => reverse(self.edge_raw(North)),
+                //  >W>
+                North => self.edge_from_data(East),
+                East => reverse(self.edge_from_data(South)),
+                South => self.edge_from_data(West),
+                West => reverse(self.edge_from_data(North)),
             },
         }
     }
 
-    fn edge_raw(&self, side: Orientation) -> Edge {
+    fn edge_from_data(&self, side: Orientation) -> Edge {
         use Orientation::*;
 
         match side {
-            North => self.data.iter().take(self.size).cloned().collect(),
-            East => {
-                let mut rv = Vec::with_capacity(self.size);
-                for i in 0..self.size {
-                    rv.push(self.data[i * self.size + self.size - 1]);
-                }
-                rv
-            }
-            South => self
-                .data
-                .iter()
-                .skip(self.size * (self.size - 1))
-                .take(self.size)
-                .cloned()
-                .collect(),
-            West => {
-                let mut rv = Vec::with_capacity(self.size);
-                for i in 0..self.size {
-                    rv.push(self.data[i * self.size]);
-                }
-                rv
-            }
+            North => self.row_from_data(0),
+            East => self.column_from_data(self.size - 1),
+            South => self.row_from_data(self.size - 1),
+            West => self.column_from_data(0),
         }
     }
 
@@ -301,13 +364,7 @@ impl Tile {
         let mut rv = Vec::new();
 
         for i in 0..self.size {
-            rv.push(
-                self.data
-                    .iter()
-                    .skip(i * self.size)
-                    .take(self.size)
-                    .collect(),
-            );
+            rv.push(self.row(i).into_iter().collect());
         }
         rv
     }
@@ -416,12 +473,13 @@ impl Picture {
             .cloned()
             .next()
             .with_context(|| "No tiles given!")?;
+        eprintln!("Inserting #{} at {:?}", first, (0, 0));
         queue.push_back(((0, 0), first));
         assembled.insert(first);
 
         'all: while let Some((pos, current_idx)) = queue.pop_front() {
             eprintln!("Checking #{} at {:?}", current_idx, pos);
-            let current_tile_rc = pic.tiles.get(&current_idx).unwrap().clone();
+            let current_tile_rc = pic.tiles.get(&current_idx).unwrap();
             let current_tile = current_tile_rc.borrow();
             #[allow(clippy::needless_collect)] // needed to borrow pic mutable later
             let others: Vec<_> = pic
@@ -430,17 +488,28 @@ impl Picture {
                 .filter(|idx| !assembled.contains(idx))
                 .cloned()
                 .collect();
+            eprintln!("others: {:#?}", others);
             'tiles: for other_idx in others.into_iter() {
-                let other_tile_rc = pic.tiles.get(&other_idx).unwrap().clone();
-                for _ in 0..4 {
+                let other_tile_rc = pic.tiles.get(&other_idx).unwrap();
+                for idx_try in 0..ORIENTATIONS.len() * 2 {
+                    eprintln!("Current:\n{}", current_tile);
+                    eprintln!("Other:\n{}", other_tile_rc.borrow());
                     'sides: for side in ORIENTATIONS.iter() {
                         if pic.neighbor(pos, *side).is_some() {
                             continue 'sides;
                         }
 
-                        if pic.insert_if_match(pos, &current_tile, *side, other_tile_rc.clone()) {
+                        if pic.check_match(&current_tile, *side, &other_tile_rc.borrow()) {
                             assembled.insert(other_idx);
-                            queue.push_back((advance(pos, *side), other_idx));
+
+                            let pos_neighbor = advance(pos, *side);
+                            eprintln!(
+                                "Inserting #{} at {:?}",
+                                other_tile_rc.borrow().idx,
+                                pos_neighbor
+                            );
+                            pic.grid.insert(pos_neighbor, Rc::downgrade(other_tile_rc));
+                            queue.push_back((pos_neighbor, other_idx));
 
                             if pic.num_neighbors(pos) == 4 {
                                 continue 'all;
@@ -449,7 +518,11 @@ impl Picture {
                             }
                         }
                     }
-                    other_tile_rc.borrow_mut().rotate();
+                    let mut other_tile = other_tile_rc.borrow_mut();
+                    other_tile.rotate();
+                    if idx_try == ORIENTATIONS.len() - 1 {
+                        other_tile.flip();
+                    }
                 }
             }
         }
@@ -463,26 +536,15 @@ impl Picture {
     /// Check if tile_current and tile_other match on side.
     ///
     /// Insert tile_other into grid if they do.
-    fn insert_if_match(
-        &mut self,
-        pos: Position,
-        tile_current: &Tile,
-        side: Orientation,
-        tile_other: Rc<MutTile>,
-    ) -> bool {
-        let other_tile = tile_other.borrow();
+    fn check_match(&self, tile_current: &Tile, side: Orientation, tile_other: &Tile) -> bool {
+        let other_tile = tile_other;
         let this_edge = tile_current.edge(side);
         let other_edge = other_tile.edge(side.opposite());
         if Tile::edge_match(&this_edge[..], &other_edge[..]) {
             eprintln!(
                 "Found match between {} and {}",
-                tile_current.idx,
-                tile_other.borrow().idx
+                tile_current.idx, tile_other.idx
             );
-
-            let pos_neighbor = advance(pos, side);
-            eprintln!("Inserting #{} at {:?}", other_tile.idx, pos_neighbor);
-            self.grid.insert(pos_neighbor, Rc::downgrade(&tile_other));
             true
         } else {
             false
