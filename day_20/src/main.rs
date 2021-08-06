@@ -91,6 +91,14 @@ fn part2(pic: Picture) -> Result<()> {
     println!("{}", borderless);
     let monster = Pattern::read_from(&PathBuf::from("monster.txt"))?;
     println!("{:#?}", monster);
+    monster.print_reconstruction();
+    monster.rotate().print_reconstruction();
+    monster.rotate().rotate().print_reconstruction();
+    monster.rotate().rotate().rotate().print_reconstruction();
+    monster.flip().print_reconstruction();
+    monster.flip().rotate().print_reconstruction();
+    monster.flip().rotate().rotate().print_reconstruction();
+    monster.flip().rotate().rotate().rotate().print_reconstruction();
     let count_monsters = borderless.count_occurences(monster);
     println!("{} monsters found.", count_monsters);
     Ok(())
@@ -583,6 +591,20 @@ impl Pattern {
         Self {
             points,
             dims: self.dims,
+        }
+    }
+
+    fn print_reconstruction(&self) {
+        for y in 0..self.dims.1 {
+            for x in 0..self.dims.0 {
+                if self.points.contains(&(x, y)) {
+                    print!("#");
+                }
+                else {
+                    print!(" ");
+                }
+            }
+            println!();
         }
     }
 }
