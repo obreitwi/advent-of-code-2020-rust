@@ -12,6 +12,7 @@ use nom::{
     Finish, IResult,
 };
 use std::cell::RefCell;
+use std::cmp::max;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::fmt;
@@ -88,6 +89,10 @@ fn part1(ts: TileSet) -> Result<Picture> {
 fn part2(pic: Picture) -> Result<()> {
     let borderless = BorderlessPicture::from(&pic);
     println!("{}", borderless);
+    let monster = Pattern::read_from(&PathBuf::from("monster.txt"))?;
+    println!("{:#?}", monster);
+    let count_monsters = borderless.count_occurences(monster);
+    println!("{} monsters found.", count_monsters);
     Ok(())
 }
 
@@ -482,6 +487,103 @@ impl From<&Picture> for BorderlessPicture {
         assert_eq!(data.len(), size * size);
 
         BorderlessPicture { data, size }
+    }
+}
+
+type Point = (usize, usize);
+
+impl BorderlessPicture {
+    fn get(&self, (x, y): Point) -> char {
+        self.data[y * self.size + x]
+    }
+
+    fn count_occurences(&self, mut pattern: Pattern) -> usize {
+        let mut count = 0;
+        for _ in 0..2
+        {
+            for _ in 0..4 {
+                count += self.count_occurences_single_pattern(&pattern);
+                pattern = pattern.rotate();
+            } 
+            pattern = pattern.flip();
+        }
+        count
+    }
+
+    fn count_occurences_single_pattern(&self, pattern: &Pattern) -> usize {
+        let mut count = 0;
+        for y in 0..self.size - pattern.dims.1 {
+            for x in 0..self.size - pattern.dims.0 {
+                if self.check_pattern_matches_at(pattern, (x, y)) {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    fn check_pattern_matches_at(&self, pattern: &Pattern, (x, y): Point) -> bool {
+        for (dx, dy) in pattern.points.iter() {
+            if self.get((x + dx, y + dy)) != '#' {
+                // eprintln!("Expected # got {}",self.get((x + dx, y + dy)));
+                // eprintln!("Failed at point #{}", i);
+                return false;
+            }
+        }
+        true
+    }
+}
+
+#[derive(Debug)]
+struct Pattern {
+    points: HashSet<Point>,
+    dims: (usize, usize),
+}
+
+impl Pattern {
+    fn read_from(input: &Path) -> Result<Self> {
+        let input = read_to_string(input)?;
+        eprintln!("Read to string:\n{}", input);
+        let mut dim_x = 0;
+        let mut dim_y = 0;
+        let mut points = HashSet::new();
+        for (y, line) in input.lines().enumerate() {
+            for (x, c) in line.char_indices() {
+                if c == '#' {
+                    points.insert((x, y));
+                    dim_x = max(dim_x, x);
+                    dim_y = max(dim_y, y);
+                }
+            }
+        }
+        Ok(Self {
+            points,
+            dims: (dim_x+1, dim_y+1),
+        })
+    }
+
+    fn rotate(&self) -> Self {
+        let points = self
+            .points
+            .iter()
+            .map(|(x, y)| (self.dims.1 - y, *x))
+            .collect();
+        Self {
+            points,
+            dims: (self.dims.1, self.dims.0),
+        }
+    }
+
+    fn flip(&self) -> Self {
+        let points = self
+            .points
+            .iter()
+            .map(|(x, y)| (self.dims.0 - x, self.dims.1 - y))
+            .collect();
+        Self {
+            points,
+            dims: self.dims,
+        }
     }
 }
 
