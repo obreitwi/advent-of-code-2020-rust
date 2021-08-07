@@ -87,20 +87,35 @@ fn part1(ts: TileSet) -> Result<Picture> {
 }
 
 fn part2(pic: Picture) -> Result<()> {
-    let borderless = BorderlessPicture::from(&pic);
+    let mut borderless = BorderlessPicture::from(&pic);
     println!("{}", borderless);
     let monster = Pattern::read_from(&PathBuf::from("monster.txt"))?;
     println!("{:#?}", monster);
-    monster.print_reconstruction();
-    monster.rotate().print_reconstruction();
-    monster.rotate().rotate().print_reconstruction();
-    monster.rotate().rotate().rotate().print_reconstruction();
-    monster.flip().print_reconstruction();
-    monster.flip().rotate().print_reconstruction();
-    monster.flip().rotate().rotate().print_reconstruction();
-    monster.flip().rotate().rotate().rotate().print_reconstruction();
-    let count_monsters = borderless.count_occurences(monster);
-    println!("{} monsters found.", count_monsters);
+    /*
+     * monster.print_reconstruction();
+     * println!();
+     * monster.rotate().print_reconstruction();
+     * println!();
+     * monster.rotate().rotate().print_reconstruction();
+     * println!();
+     * monster.rotate().rotate().rotate().print_reconstruction();
+     * println!();
+     * monster.flip().print_reconstruction();
+     * println!();
+     * monster.flip().rotate().print_reconstruction();
+     * println!();
+     * monster.flip().rotate().rotate().print_reconstruction();
+     * println!();
+     * monster.flip().rotate().rotate().rotate().print_reconstruction();
+     * println!();
+     */
+    let matches_monsters = borderless.check(monster);
+    borderless.mark_matches(&matches_monsters[..]);
+    borderless.rotate();
+    // borderless.rotate();
+    borderless.print_grid();
+    println!("{} monsters found.", matches_monsters.len());
+    println!("Roughness: {}", borderless.count_roughness());
     Ok(())
 }
 
@@ -505,29 +520,33 @@ impl BorderlessPicture {
         self.data[y * self.size + x]
     }
 
-    fn count_occurences(&self, mut pattern: Pattern) -> usize {
-        let mut count = 0;
+    fn check(&self, mut pattern: Pattern) -> Vec<(Point, Pattern)> {
+        let mut rv = Vec::new();
         for _ in 0..2
         {
             for _ in 0..4 {
-                count += self.count_occurences_single_pattern(&pattern);
+                for mtch in self.matches_single_pattern(&pattern).into_iter()
+                {
+                    rv.push((mtch, pattern.clone()));
+                }
+                eprintln!("Count now: {}", rv.len());
                 pattern = pattern.rotate();
-            } 
+            }
             pattern = pattern.flip();
         }
-        count
+        rv
     }
 
-    fn count_occurences_single_pattern(&self, pattern: &Pattern) -> usize {
-        let mut count = 0;
+    fn matches_single_pattern(&self, pattern: &Pattern) -> Vec<Point> {
+        let mut rv = Vec::new();
         for y in 0..self.size - pattern.dims.1 {
             for x in 0..self.size - pattern.dims.0 {
                 if self.check_pattern_matches_at(pattern, (x, y)) {
-                    count += 1;
+                    rv.push((x, y));
                 }
             }
         }
-        count
+        rv
     }
 
     fn check_pattern_matches_at(&self, pattern: &Pattern, (x, y): Point) -> bool {
@@ -540,9 +559,46 @@ impl BorderlessPicture {
         }
         true
     }
+
+    fn count_roughness(&self) -> usize {
+        self.data.iter().filter(|c| **c == '#').count()
+    }
+
+    fn mark_matches(&mut self, matches: &[(Point, Pattern)]) {
+        for ((x, y), pat) in matches {
+            for (dx, dy) in pat.points.iter() {
+                assert_eq!(self.get((x+dx, y+dy)), '#');
+                self.set((x+dx, y+dy), 'O')
+            }
+        }
+    }
+
+    fn rotate(&mut self) {
+        let mut data = Vec::with_capacity(self.size * self.size);
+        for y in 0..self.size {
+            for x in 0..self.size {
+                data.push(self.get((self.size - 1 - y, x)));
+            }
+        }
+        self.data = data;
+    }
+
+    fn set(&mut self, (x, y): Point, c: char)
+    {
+        self.data[y * self.size + x] = c;
+    }
+
+    fn print_grid(&self) {
+        for y in 0..self.size {
+            for x in 0..self.size {
+                print!("{}", self.get((x, y)));
+            }
+            println!();
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Pattern {
     points: HashSet<Point>,
     dims: (usize, usize),
@@ -574,7 +630,7 @@ impl Pattern {
         let points = self
             .points
             .iter()
-            .map(|(x, y)| (self.dims.1 - y, *x))
+            .map(|(x, y)| (self.dims.1 - 1 - y, *x))
             .collect();
         Self {
             points,
@@ -586,7 +642,7 @@ impl Pattern {
         let points = self
             .points
             .iter()
-            .map(|(x, y)| (self.dims.0 - x, self.dims.1 - y))
+            .map(|(x, y)| (*x, self.dims.1 - 1 - y))
             .collect();
         Self {
             points,
@@ -594,7 +650,7 @@ impl Pattern {
         }
     }
 
-    fn print_reconstruction(&self) {
+    fn _print_reconstruction(&self) {
         for y in 0..self.dims.1 {
             for x in 0..self.dims.0 {
                 if self.points.contains(&(x, y)) {
