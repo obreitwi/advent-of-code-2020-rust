@@ -156,7 +156,7 @@ mod tests {
     fn debug() -> Result<()> {
         assert_eq!(
             part1(&PathBuf::from("debug.txt"))?,
-            10,
+            5,
             "Invalid occurences in test data."
         );
         Ok(())
