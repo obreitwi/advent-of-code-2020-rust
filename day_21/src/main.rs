@@ -131,7 +131,7 @@ struct IngredientToAllergens {
 
 impl IngredientToAllergens {
     fn new(dishes: &Dishes) -> Self {
-        let mut data = Self::raw(&dishes);
+        let mut data = Self::raw(dishes);
 
         let ingredients = dishes.ingredients();
 
