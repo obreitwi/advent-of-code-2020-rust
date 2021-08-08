@@ -31,10 +31,16 @@ fn part1(input: &Path) -> Result<usize> {
 
     let mut count = 0;
     for dish in dishes.data.iter() {
-        count += dish.ingredients.intersection(&ingredients_without_allergens).count();
+        count += dish
+            .ingredients
+            .intersection(&ingredients_without_allergens)
+            .count();
         println!("Count: {}", count);
     }
-    println!("Part1: Number of ingredients without allergens: {:#?}", ingredients_without_allergens);
+    println!(
+        "Part1: Number of ingredients without allergens: {:#?}",
+        ingredients_without_allergens
+    );
     println!("Part1: Number of appearances: {}", count);
 
     Ok(count)
@@ -109,10 +115,15 @@ impl IngredientToAllergens {
     fn new(dishes: &Dishes) -> Self {
         let mut data = Self::raw(dishes);
 
+        let ingredients = dishes.ingredients();
+
         for dish in dishes.data.iter() {
-            for ingredient in dish.ingredients.iter() {
-                data.entry(ingredient.clone())
-                    .and_modify(|a| *a = dish.allergens.intersection(a).cloned().collect());
+            for ingredient in ingredients.difference(&dish.ingredients) {
+                // all ingredients not present in the current recipe cannot account for allergens
+                // present in the recipe
+                data.entry(ingredient.clone()).and_modify(|a| {
+                    *a = a.difference(&dish.allergens).cloned().collect();
+                });
             }
         }
 
@@ -142,9 +153,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn debug() -> Result<()>
-    {
-        assert_eq!(part1(&PathBuf::from("debug.txt"))?, 10, "Invalid occurences in test data.");
+    fn debug() -> Result<()> {
+        assert_eq!(
+            part1(&PathBuf::from("debug.txt"))?,
+            10,
+            "Invalid occurences in test data."
+        );
         Ok(())
     }
 }
