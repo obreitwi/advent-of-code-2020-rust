@@ -9,7 +9,8 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     Finish, IResult,
 };
-use std::collections::{HashMap, HashSet};
+use itertools::Itertools;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ fn main() -> Result<()> {
     let input = PathBuf::from(env::args().nth(1).with_context(|| "No input provided!")?);
 
     part1(&input)?;
+    part2(&input)?;
 
     Ok(())
 }
@@ -44,6 +46,22 @@ fn part1(input: &Path) -> Result<usize> {
     println!("Part1: Number of appearances: {}", count);
 
     Ok(count)
+}
+
+fn part2(input: &Path) -> Result<String> {
+    let dishes = Dishes::read(input)?;
+    let ingredient_to_allergens = IngredientToAllergens::new(&dishes);
+
+    let al_to_ing = ingredient_to_allergens.allergen_to_ingredient();
+
+    println!("{:#?}", al_to_ing);
+
+    #[allow(unstable_name_collisions)]
+    let retval: String = al_to_ing.values().cloned().intersperse(String::from(",")).collect();
+
+    println!("{}", retval);
+
+    Ok(retval)
 }
 
 type Allergen = String;
@@ -113,7 +131,7 @@ struct IngredientToAllergens {
 
 impl IngredientToAllergens {
     fn new(dishes: &Dishes) -> Self {
-        let mut data = Self::raw(dishes);
+        let mut data = Self::raw(&dishes);
 
         let ingredients = dishes.ingredients();
 
@@ -138,6 +156,39 @@ impl IngredientToAllergens {
             .collect()
     }
 
+    fn allergen_to_ingredient(&self) -> BTreeMap<Allergen, Ingredient> {
+        let mut potential_ingredients: HashMap<Allergen, HashSet<Ingredient>> = HashMap::new();
+
+        for (ing, allergens) in self.data.iter() {
+            for al in allergens {
+                potential_ingredients
+                    .entry(al.to_string())
+                    .or_insert_with(HashSet::new)
+                    .insert(ing.to_string());
+            }
+        }
+        let mut allergen_to_ingredient = BTreeMap::new();
+
+        while !potential_ingredients.is_empty() {
+            let allergen = potential_ingredients
+                .iter()
+                .find(|(_, v)| v.len() == 1)
+                .unwrap_or_else(|| panic!("Cannot solve!")).0.clone();
+            let ingredients = potential_ingredients.remove(&allergen.clone()).unwrap();
+            assert_eq!(ingredients.len(), 1, "Did not find candidate, cannot solve..");
+            let ingredient = ingredients.into_iter().next().unwrap();
+
+            for pot_ing in potential_ingredients.values_mut()
+            {
+                pot_ing.remove(&ingredient);
+            }
+
+            allergen_to_ingredient.insert(allergen, ingredient);
+        }
+
+        allergen_to_ingredient
+    }
+
     fn raw(dishes: &Dishes) -> HashMap<Ingredient, HashSet<Allergen>> {
         let allergens = dishes.allergens();
         dishes
@@ -153,11 +204,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn debug() -> Result<()> {
+    fn debug_part1() -> Result<()> {
         assert_eq!(
             part1(&PathBuf::from("debug.txt"))?,
             5,
-            "Invalid occurences in test data."
+            "Invalid occurrences in test data."
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn debug_part2() -> Result<()> {
+        assert_eq!(
+            part2(&PathBuf::from("debug.txt"))?,
+            String::from("mxmxvkd,sqjhc,fvjkl"),
+            "Invalid occurrences in test data."
         );
         Ok(())
     }
