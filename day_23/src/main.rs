@@ -18,9 +18,18 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 fn main() -> Result<()> {
-    let input = env::args().nth(1).with_context(|| "No input provided!")?;
-    // part1(&input)?;
+    // let input = env::args().nth(1).with_context(|| "No input provided!")?;
+    let input = "583976241".to_string();
+    part1(&input)?;
     // part2(&input)?;
+    Ok(())
+}
+
+fn part1(i: &str) -> Result<()> {
+    let mut cups = CrabCups::from(i);
+
+    println!("{}", cups);
+
     Ok(())
 }
 
@@ -83,6 +92,23 @@ impl CrabCups {
             },
         ))
     }
+
+    pub fn make_move(&mut self) {
+        todo!();
+    }
+
+    fn pick_up_cups(&mut self) -> RcCup
+    {
+        todo!();
+    }
+
+    fn select_destination(&mut self) -> RcCup {
+        todo!();
+    }
+
+    fn select_current(&mut self) -> RcCup {
+        todo!();
+    }
 }
 
 impl fmt::Display for CrabCups {
@@ -91,7 +117,8 @@ impl fmt::Display for CrabCups {
         let label_done = current.borrow().label;
         write!(f, "({})", label_done)?;
         loop {
-            current = { let next = current.borrow().right.clone();
+            current = {
+                let next = current.borrow().right.clone();
                 next.upgrade().unwrap()
             };
             let cup = current.borrow();
