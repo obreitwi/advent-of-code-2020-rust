@@ -10,6 +10,7 @@ use nom::{
     ErrorConvert, Finish, IResult,
 };
 use std::cell::RefCell;
+use std::cmp::{max, min};
 use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::fmt;
@@ -47,6 +48,8 @@ type WeakCup = Weak<RefCell<Cup>>;
 
 #[derive(Debug)]
 struct CrabCups {
+    min_label: Label,
+    max_label: Label,
     current: WeakCup,
     cups: HashMap<Label, RcCup>,
 }
@@ -60,7 +63,13 @@ impl CrabCups {
         let mut first = Weak::new();
         let mut prev = Weak::new();
 
+        let mut min_label = Label::MAX;
+        let mut max_label = Label::from(0);
+
         for l in labels.chars() {
+            min_label = min(l, min_label);
+            max_label = max(l, max_label);
+
             let current = Rc::new(RefCell::new(Cup {
                 label: l,
                 left: prev.clone(),
@@ -87,6 +96,8 @@ impl CrabCups {
         Ok((
             i,
             Self {
+                min_label,
+                max_label,
                 cups,
                 current: first,
             },
@@ -94,12 +105,69 @@ impl CrabCups {
     }
 
     pub fn make_move(&mut self) {
-        todo!();
+        let taken = self.pick_up_cups();
+        let taken_labels = Self::labels(taken.clone());
+        let (taken_left, taken_right) = taken;
     }
 
-    fn pick_up_cups(&mut self) -> RcCup
-    {
-        todo!();
+    fn pick_up_cups(&mut self) -> (RcCup, RcCup) {
+        self.remove_cups(3)
+    }
+
+    fn remove_cups(&mut self, num: usize) -> (RcCup, RcCup) {
+        assert!(num > 0);
+        let removed_first = Self::nth_right(self.current.clone(), 1).upgrade().unwrap();
+        let removed_last = Self::nth_right(self.current.clone(), num)
+            .upgrade()
+            .unwrap();
+
+        let remaining_gap_left = removed_first.borrow().left.upgrade().unwrap();
+        let remaining_gap_right = removed_last.borrow().right.upgrade().unwrap();
+
+        Self::close_gap(&removed_last, &removed_first);
+        Self::close_gap(&remaining_gap_left, &remaining_gap_right);
+
+        (removed_first, removed_last)
+    }
+
+    fn labels((left, right): (RcCup, RcCup)) -> Vec<Label> {
+        let label_right = &right.borrow().label;
+        let mut current = left;
+        let mut labels = Vec::new();
+        loop {
+            let current_label = current.borrow().label;
+            labels.push(current_label);
+            if current_label == *label_right {
+                break;
+            } else {
+                let right = current.borrow().right.clone();
+                current = right.upgrade().unwrap();
+            }
+        }
+        labels
+    }
+
+    fn close_gap(left: &RcCup, right: &RcCup) {
+        right.borrow_mut().left = Rc::downgrade(left);
+        left.borrow_mut().right = Rc::downgrade(right);
+    }
+
+    fn nth_right(mut current: WeakCup, num: usize) -> WeakCup {
+        assert!(num > 0);
+        for _ in 0..num {
+            let cup = current.upgrade().unwrap();
+            current = cup.borrow().right.clone();
+        }
+        current
+    }
+
+    fn nth_left(mut current: WeakCup, num: usize) -> WeakCup {
+        assert!(num > 0);
+        for _ in 0..num {
+            let cup = current.upgrade().unwrap();
+            current = cup.borrow().left.clone();
+        }
+        current
     }
 
     fn select_destination(&mut self) -> RcCup {
@@ -174,6 +242,7 @@ mod tests {
             );
         }
 
+        eprintln!("{:#?}", cups);
         for (label, cup) in cups.cups.iter() {
             assert_eq!(*label, cup.borrow().label, "Labels don't match.");
         }
