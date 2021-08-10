@@ -28,8 +28,12 @@ fn main() -> Result<()> {
 
 fn part1(i: &str) -> Result<()> {
     let mut cups = CrabCups::from(i);
-    cups.make_move();
-    println!("{}", cups);
+
+    for _ in 0..100
+    {
+        cups.make_move();
+    }
+    println!("Labels after 1: {}", cups.labels_from(1)?.into_iter().skip(1).map(|i| format!("{}", i)).collect::<String>());
 
     Ok(())
 }
@@ -189,7 +193,7 @@ impl CrabCups {
         current
     }
 
-    fn nth_left(mut current: WeakCup, num: usize) -> WeakCup {
+    fn _nth_left(mut current: WeakCup, num: usize) -> WeakCup {
         assert!(num > 0);
         for _ in 0..num {
             let cup = current.upgrade().unwrap();
@@ -203,14 +207,25 @@ impl CrabCups {
         current.borrow().right.clone().upgrade().unwrap()
     }
 
-    fn left(current: &RcCup) -> RcCup
+    fn _left(current: &RcCup) -> RcCup
     {
         current.borrow().left.clone().upgrade().unwrap()
     }
 
-
     fn select_current(&mut self) -> RcCup {
-        todo!();
+        Self::right(&self.current.upgrade().unwrap())
+    }
+
+    pub fn labels_from(&self, label: Label) -> Result<Vec<Label>>
+    {
+        let mut current = self.cups.get(&label).with_context(|| "Invalid label specified.j")?.clone();
+        let mut labels = Vec::with_capacity(self.cups.len());
+        for _ in 0..self.cups.len()
+        {
+            labels.push(current.borrow().label);
+            current = Self::right(&current);
+        }
+        Ok(labels)
     }
 }
 
@@ -253,7 +268,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parsing() {
+    fn test_parsing() -> Result<()> {
         let raw = "123456789".to_string();
         let cups = CrabCups::from(raw.as_str());
 
@@ -278,10 +293,23 @@ mod tests {
             );
         }
 
+        assert_eq!(cups.labels_from(1)?, vec![1,2,3,4,5,6,7,8,9]);
+
         eprintln!("{:#?}", cups);
         for (label, cup) in cups.cups.iter() {
             assert_eq!(*label, cup.borrow().label, "Labels don't match.");
         }
         assert_eq!(format!("{}", cups), "(1) 2 3 4 5 6 7 8 9".to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn debug_moves() -> Result<()> {
+        let mut cups = CrabCups::from("389125467");
+        for _ in 0..100 {
+            cups.make_move();
+        }
+        assert_eq!(cups.labels_from(1)?, vec![1, 6, 7, 3, 8, 4, 5, 2, 9]);
+        Ok(())
     }
 }
