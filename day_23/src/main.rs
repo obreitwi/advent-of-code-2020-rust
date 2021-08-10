@@ -29,11 +29,17 @@ fn main() -> Result<()> {
 fn part1(i: &str) -> Result<()> {
     let mut cups = CrabCups::from(i);
 
-    for _ in 0..100
-    {
+    for _ in 0..100 {
         cups.make_move();
     }
-    println!("Labels after 1: {}", cups.labels_from(1)?.into_iter().skip(1).map(|i| format!("{}", i)).collect::<String>());
+    println!(
+        "Labels after 1: {}",
+        cups.labels_from(1)?
+            .into_iter()
+            .skip(1)
+            .map(|i| format!("{}", i))
+            .collect::<String>()
+    );
 
     Ok(())
 }
@@ -59,54 +65,63 @@ struct CrabCups {
 }
 
 impl CrabCups {
+    pub fn new(label: Label) -> Self {
+        let mut cups = HashMap::new();
+        let init = {
+            let init = Rc::new(RefCell::new(Cup {
+                label,
+                left: Weak::new(),
+                right: Weak::new(),
+            }));
+            init.borrow_mut().left = Rc::downgrade(&init);
+            init.borrow_mut().right = Rc::downgrade(&init);
+            init
+        };
+        let current = Rc::downgrade(&init);
+        cups.insert(label, init);
+        Self {
+            cups,
+            min_label: Label::MAX,
+            max_label: Label::MIN,
+            current,
+        }
+    }
+
+    fn add_left_from_current(&mut self, label: Label) {
+        let current = self.current.upgrade().unwrap();
+        let last = Self::left(&current);
+
+        self.min_label = min(label, self.min_label);
+        self.max_label = max(label, self.max_label);
+
+        let new_cup = Rc::new(RefCell::new(Cup {
+            label,
+            left: Weak::new(),
+            right: Weak::new(),
+        }));
+        self.cups.insert(label, new_cup.clone());
+
+        Self::close_gap(&last, &new_cup);
+        Self::close_gap(&new_cup, &current);
+    }
+
     pub fn parse(i: &str) -> IResult<&str, Self> {
         let (i, labels) = digit1(i)?;
 
-        let mut cups = HashMap::new();
-
-        let mut first = Weak::new();
-        let mut prev = Weak::new();
-
-        let mut min_label = Label::MAX;
-        let mut max_label = Label::MIN;
+        let mut retval: Option<Self> = None;
 
         for l in labels.chars() {
             let l = String::from(l).parse::<Label>().unwrap();
-            min_label = min(l, min_label);
-            max_label = max(l, max_label);
 
-            let current = Rc::new(RefCell::new(Cup {
-                label: l,
-                left: prev.clone(),
-                right: Weak::new(),
-            }));
-            if let Some(prev) = prev.upgrade() {
-                prev.borrow_mut().right = Rc::downgrade(&current);
-            };
-            if first.upgrade().is_none() {
-                first = Rc::downgrade(&current);
+            retval = match retval {
+                None => Some(Self::new(l)),
+                Some(mut cc) => {
+                    cc.add_left_from_current(l);
+                    Some(cc)
+                }
             }
-            prev = Rc::downgrade(&current);
-            cups.insert(l, current);
         }
-        // close the loop
-        let last = prev;
-        if let Some(c) = first.upgrade() {
-            c.borrow_mut().left = last.clone();
-        };
-        if let Some(c) = last.upgrade() {
-            c.borrow_mut().right = first.clone();
-        };
-
-        Ok((
-            i,
-            Self {
-                min_label,
-                max_label,
-                cups,
-                current: first,
-            },
-        ))
+        Ok((i, retval.unwrap()))
     }
 
     pub fn make_move(&mut self) {
@@ -123,15 +138,17 @@ impl CrabCups {
 
     fn select_destination(&self, taken: (RcCup, RcCup)) -> RcCup {
         let taken = Self::labels(taken);
-        self.cups.get(&self.label_destination(&taken[..])).cloned().unwrap()
+        self.cups
+            .get(&self.label_destination(&taken[..]))
+            .cloned()
+            .unwrap()
     }
 
     fn label_destination(&self, taken: &[Label]) -> Label {
         let next_label = |label| {
             if label == self.min_label {
                 self.max_label
-            }
-            else {
+            } else {
                 label - 1
             }
         };
@@ -193,7 +210,7 @@ impl CrabCups {
         current
     }
 
-    fn _nth_left(mut current: WeakCup, num: usize) -> WeakCup {
+    fn nth_left(mut current: WeakCup, num: usize) -> WeakCup {
         assert!(num > 0);
         for _ in 0..num {
             let cup = current.upgrade().unwrap();
@@ -202,13 +219,11 @@ impl CrabCups {
         current
     }
 
-    fn right(current: &RcCup) -> RcCup
-    {
+    fn right(current: &RcCup) -> RcCup {
         current.borrow().right.clone().upgrade().unwrap()
     }
 
-    fn _left(current: &RcCup) -> RcCup
-    {
+    fn left(current: &RcCup) -> RcCup {
         current.borrow().left.clone().upgrade().unwrap()
     }
 
@@ -216,12 +231,14 @@ impl CrabCups {
         Self::right(&self.current.upgrade().unwrap())
     }
 
-    pub fn labels_from(&self, label: Label) -> Result<Vec<Label>>
-    {
-        let mut current = self.cups.get(&label).with_context(|| "Invalid label specified.j")?.clone();
+    pub fn labels_from(&self, label: Label) -> Result<Vec<Label>> {
+        let mut current = self
+            .cups
+            .get(&label)
+            .with_context(|| "Invalid label specified.j")?
+            .clone();
         let mut labels = Vec::with_capacity(self.cups.len());
-        for _ in 0..self.cups.len()
-        {
+        for _ in 0..self.cups.len() {
             labels.push(current.borrow().label);
             current = Self::right(&current);
         }
@@ -293,7 +310,7 @@ mod tests {
             );
         }
 
-        assert_eq!(cups.labels_from(1)?, vec![1,2,3,4,5,6,7,8,9]);
+        assert_eq!(cups.labels_from(1)?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         eprintln!("{:#?}", cups);
         for (label, cup) in cups.cups.iter() {
