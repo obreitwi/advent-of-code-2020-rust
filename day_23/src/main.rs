@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     // let input = env::args().nth(1).with_context(|| "No input provided!")?;
     let input = "583976241".to_string();
     part1(&input)?;
-    // part2(&input)?;
+    part2(&input)?;
     Ok(())
 }
 
@@ -33,13 +33,24 @@ fn part1(i: &str) -> Result<()> {
         cups.make_move();
     }
     println!(
-        "Labels after 1: {}",
+        "[Part 1] Labels after 1: {}",
         cups.labels_from(1)?
             .into_iter()
-            .skip(1)
             .map(|i| format!("{}", i))
             .collect::<String>()
     );
+
+    Ok(())
+}
+
+fn part2(i: &str) -> Result<()> {
+    let mut cups = CrabCups::from_extended(i, 1_000_000);
+
+    for _ in 0..10_000_000 {
+        cups.make_move();
+    }
+    let labels = cups.n_labels_from(1, 2)?;
+    println!("[Part 2] Product of both labels after 1: {}", labels[0] * labels[1]);
 
     Ok(())
 }
@@ -81,8 +92,8 @@ impl CrabCups {
         cups.insert(label, init);
         Self {
             cups,
-            min_label: Label::MAX,
-            max_label: Label::MIN,
+            min_label: label,
+            max_label: label,
             current,
         }
     }
@@ -122,6 +133,16 @@ impl CrabCups {
             }
         }
         Ok((i, retval.unwrap()))
+    }
+
+    pub fn parse_extended(i: &str, num_cups: usize) -> IResult<&str, Self> {
+        let (i, mut init) = Self::parse(i)?;
+
+        while init.num_cups() < num_cups {
+            init.add_left_from_current(init.max_label + 1);
+        }
+
+        Ok((i, init))
     }
 
     pub fn make_move(&mut self) {
@@ -232,17 +253,37 @@ impl CrabCups {
     }
 
     pub fn labels_from(&self, label: Label) -> Result<Vec<Label>> {
+        self.n_labels_from(label, self.num_cups() - 1)
+    }
+
+    pub fn n_labels_from(&self, label: Label, num: usize) -> Result<Vec<Label>> {
         let mut current = self
             .cups
             .get(&label)
             .with_context(|| "Invalid label specified.j")?
             .clone();
         let mut labels = Vec::with_capacity(self.cups.len());
-        for _ in 0..self.cups.len() {
-            labels.push(current.borrow().label);
+        for _ in 0..num {
             current = Self::right(&current);
+            labels.push(current.borrow().label);
         }
         Ok(labels)
+    }
+
+    pub fn num_cups(&self) -> usize {
+        self.cups.len()
+    }
+
+    pub fn from_extended(i: &str, extend_until: usize) -> Self {
+        match Self::parse_extended(i, extend_until).finish() {
+            Ok((i, cc)) => {
+                assert!(i.is_empty(), "Did not consume full string.");
+                cc
+            }
+            Err(e) => {
+                panic!("Error parsing CrabCups: {}", e);
+            }
+        }
     }
 }
 
@@ -310,7 +351,7 @@ mod tests {
             );
         }
 
-        assert_eq!(cups.labels_from(1)?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(cups.labels_from(1)?, vec![2, 3, 4, 5, 6, 7, 8, 9]);
 
         eprintln!("{:#?}", cups);
         for (label, cup) in cups.cups.iter() {
@@ -326,7 +367,18 @@ mod tests {
         for _ in 0..100 {
             cups.make_move();
         }
-        assert_eq!(cups.labels_from(1)?, vec![1, 6, 7, 3, 8, 4, 5, 2, 9]);
+        assert_eq!(cups.labels_from(1)?, vec![6, 7, 3, 8, 4, 5, 2, 9]);
+        Ok(())
+    }
+
+    #[test]
+    fn debug_extended_moves() -> Result<()> {
+        let mut cups = CrabCups::from_extended("389125467", 1_000_000);
+        assert_eq!(cups.labels_from(1)?.len(), 1_000_000 - 1);
+        for _ in 0..10_000_000 {
+            cups.make_move();
+        }
+        assert_eq!(cups.n_labels_from(1, 2)?, vec![934001, 159792]);
         Ok(())
     }
 }
