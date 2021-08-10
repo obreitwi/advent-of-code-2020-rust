@@ -28,13 +28,13 @@ fn main() -> Result<()> {
 
 fn part1(i: &str) -> Result<()> {
     let mut cups = CrabCups::from(i);
-
+    cups.make_move();
     println!("{}", cups);
 
     Ok(())
 }
 
-type Label = char;
+type Label = usize;
 
 #[derive(Debug)]
 struct Cup {
@@ -64,9 +64,10 @@ impl CrabCups {
         let mut prev = Weak::new();
 
         let mut min_label = Label::MAX;
-        let mut max_label = Label::from(0);
+        let mut max_label = Label::MIN;
 
         for l in labels.chars() {
+            let l = String::from(l).parse::<Label>().unwrap();
             min_label = min(l, min_label);
             max_label = max(l, max_label);
 
@@ -106,8 +107,35 @@ impl CrabCups {
 
     pub fn make_move(&mut self) {
         let taken = self.pick_up_cups();
-        let taken_labels = Self::labels(taken.clone());
+
+        let destination = self.select_destination(taken.clone());
         let (taken_left, taken_right) = taken;
+
+        let destination_right = Self::right(&destination);
+        Self::close_gap(&destination, &taken_left);
+        Self::close_gap(&taken_right, &destination_right);
+        self.current = Rc::downgrade(&self.select_current());
+    }
+
+    fn select_destination(&self, taken: (RcCup, RcCup)) -> RcCup {
+        let taken = Self::labels(taken);
+        self.cups.get(&self.label_destination(&taken[..])).cloned().unwrap()
+    }
+
+    fn label_destination(&self, taken: &[Label]) -> Label {
+        let next_label = |label| {
+            if label == self.min_label {
+                self.max_label
+            }
+            else {
+                label - 1
+            }
+        };
+        let mut proposed = next_label(self.current.upgrade().unwrap().borrow().label);
+        while taken.contains(&proposed) {
+            proposed = next_label(proposed);
+        }
+        proposed
     }
 
     fn pick_up_cups(&mut self) -> (RcCup, RcCup) {
@@ -170,9 +198,16 @@ impl CrabCups {
         current
     }
 
-    fn select_destination(&mut self) -> RcCup {
-        todo!();
+    fn right(current: &RcCup) -> RcCup
+    {
+        current.borrow().right.clone().upgrade().unwrap()
     }
+
+    fn left(current: &RcCup) -> RcCup
+    {
+        current.borrow().left.clone().upgrade().unwrap()
+    }
+
 
     fn select_current(&mut self) -> RcCup {
         todo!();
@@ -223,6 +258,7 @@ mod tests {
         let cups = CrabCups::from(raw.as_str());
 
         for label in raw.chars() {
+            let label = String::from(label).parse::<Label>().unwrap();
             let current = cups.cups.get(&label).unwrap();
             eprintln!(
                 "current: {} left: {:#?} right: {:#?}",
@@ -232,13 +268,13 @@ mod tests {
                     .left
                     .upgrade()
                     .map(|c| c.borrow().label)
-                    .unwrap_or('X'),
+                    .unwrap_or(Label::MAX),
                 current
                     .borrow()
                     .right
                     .upgrade()
                     .map(|c| c.borrow().label)
-                    .unwrap_or('X'),
+                    .unwrap_or(Label::MAX),
             );
         }
 
