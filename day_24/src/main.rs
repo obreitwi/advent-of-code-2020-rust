@@ -16,9 +16,16 @@ use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
-    let input = PathBuf::from(env::args().nth(1).with_context(|| "No input provided!")?);
-    // part1(&input)?;
+    let input = read_to_string(&PathBuf::from("input.txt"))?;
+    part1(&input)?;
     // part2(&input)?;
+    Ok(())
+}
+
+fn part1(input: &str) -> Result<()> {
+    let mut grid = Grid::from(input);
+    grid.process_all_paths();
+    println!("Number of black tiles: {}", grid.count_black_tiles());
     Ok(())
 }
 
@@ -43,7 +50,7 @@ enum Direction {
  *       +z
  */
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Coordinate {
     x: i64,
     y: i64,
@@ -51,6 +58,10 @@ struct Coordinate {
 }
 
 impl Coordinate {
+    fn origin() -> Self {
+        Self { x: 0, y: 0, z: 0 }
+    }
+
     fn apply(&mut self, dir: &Direction) {
         use Direction::*;
 
@@ -121,11 +132,11 @@ impl Direction {
 }
 
 #[derive(Debug)]
-struct Tile {
+struct PathToTile {
     directions: Vec<Direction>,
 }
 
-impl Tile {
+impl PathToTile {
     pub fn parse(i: &str) -> IResult<&str, Self> {
         map(many1(Direction::parse), |directions| Self { directions })(i)
     }
@@ -133,14 +144,42 @@ impl Tile {
 
 #[derive(Debug)]
 struct Grid {
-    tiles: Vec<Tile>,
+    paths: Vec<PathToTile>,
+    black_tiles: HashSet<Coordinate>,
 }
 
 impl Grid {
     fn parse(i: &str) -> IResult<&str, Self> {
-        map(separated_list1(line_ending, Tile::parse), |tiles| Self {
-            tiles,
+        map(separated_list1(line_ending, PathToTile::parse), |paths| {
+            Self {
+                paths,
+                black_tiles: HashSet::new(),
+            }
         })(i)
+    }
+
+    fn count_black_tiles(&self) -> usize {
+        self.black_tiles.len()
+    }
+
+    fn process_all_paths(&mut self) {
+        while let Some(path) = self.paths.pop() {
+            self.process_path(&path);
+        }
+    }
+
+    fn process_path(&mut self, path: &PathToTile) {
+        let mut coord = Coordinate::origin();
+        for dir in path.directions.iter() {
+            coord.apply(dir);
+        }
+        self.flip(coord);
+    }
+
+    fn flip(&mut self, coordinate: Coordinate) {
+        if !self.black_tiles.remove(&coordinate) {
+            self.black_tiles.insert(coordinate);
+        }
     }
 }
 
@@ -165,7 +204,9 @@ mod tests {
     #[test]
     fn part1_debug() -> Result<()> {
         let input = read_to_string(&PathBuf::from("debug.txt"))?;
-        let grid = Grid::from(input.as_str());
+        let mut grid = Grid::from(input.as_str());
+        grid.process_all_paths();
+        assert_eq!(grid.count_black_tiles(), 10);
         Ok(())
     }
 }
