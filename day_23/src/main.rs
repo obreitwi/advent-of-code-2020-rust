@@ -50,7 +50,10 @@ fn part2(i: &str) -> Result<()> {
         cups.make_move();
     }
     let labels = cups.n_labels_from(1, 2)?;
-    println!("[Part 2] Product of both labels after 1: {}", labels[0] * labels[1]);
+    println!(
+        "[Part 2] Product of both labels after 1: {}",
+        labels[0] * labels[1]
+    );
 
     Ok(())
 }
