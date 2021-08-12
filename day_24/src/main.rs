@@ -9,27 +9,35 @@ use nom::{
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     ErrorConvert, Finish, IResult,
 };
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
 fn main() -> Result<()> {
     let input = read_to_string(&PathBuf::from("input.txt"))?;
     part1(&input)?;
-    // part2(&input)?;
+    part2(&input)?;
     Ok(())
 }
 
 fn part1(input: &str) -> Result<()> {
-    let mut grid = Grid::from(input);
-    grid.process_all_paths();
+    let grid = Grid::from(input);
     println!("Number of black tiles: {}", grid.count_black_tiles());
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy)]
+fn part2(input: &str) -> Result<()> {
+    let mut grid = Grid::from(input);
+    grid.update_n_days(100);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, EnumIter)]
 enum Direction {
     West,
     East,
@@ -62,7 +70,7 @@ impl Coordinate {
         Self { x: 0, y: 0, z: 0 }
     }
 
-    fn apply(&mut self, dir: &Direction) {
+    fn apply(mut self, dir: &Direction) -> Self {
         use Direction::*;
 
         match *dir {
@@ -91,6 +99,7 @@ impl Coordinate {
                 self.y -= 1;
             }
         }
+        self
     }
 }
 
@@ -144,34 +153,29 @@ impl PathToTile {
 
 #[derive(Debug)]
 struct Grid {
-    paths: Vec<PathToTile>,
     black_tiles: HashSet<Coordinate>,
 }
 
 impl Grid {
     fn parse(i: &str) -> IResult<&str, Self> {
-        map(separated_list1(line_ending, PathToTile::parse), |paths| {
-            Self {
-                paths,
-                black_tiles: HashSet::new(),
-            }
-        })(i)
+        let mut grid = Self {
+            black_tiles: HashSet::new(),
+        };
+        let (i, mut paths) = separated_list1(line_ending, PathToTile::parse)(i)?;
+        while let Some(path) = paths.pop() {
+            grid.process_path(&path);
+        }
+        Ok((i, grid))
     }
 
     fn count_black_tiles(&self) -> usize {
         self.black_tiles.len()
     }
 
-    fn process_all_paths(&mut self) {
-        while let Some(path) = self.paths.pop() {
-            self.process_path(&path);
-        }
-    }
-
     fn process_path(&mut self, path: &PathToTile) {
         let mut coord = Coordinate::origin();
         for dir in path.directions.iter() {
-            coord.apply(dir);
+            coord = coord.apply(dir);
         }
         self.flip(coord);
     }
@@ -179,6 +183,44 @@ impl Grid {
     fn flip(&mut self, coordinate: Coordinate) {
         if !self.black_tiles.remove(&coordinate) {
             self.black_tiles.insert(coordinate);
+        }
+    }
+
+    pub fn tile_to_num_neighbors(&self) -> HashMap<Coordinate, usize> {
+        let mut map = HashMap::new();
+        for tile in self.black_tiles.iter() {
+            for dir in Direction::iter() {
+                let neighbor = tile.apply(&dir);
+                *map.entry(neighbor).or_insert(0) += 1;
+            }
+        }
+        map
+    }
+
+    pub fn update_day(&mut self) {
+        let neighbors = self.tile_to_num_neighbors();
+        let mut updated_black_tiles = HashSet::new();
+
+        for bt in self.black_tiles.iter() {
+            let num_neighbors = neighbors.get(bt).unwrap_or(&0);
+            if *num_neighbors == 1 || *num_neighbors == 2 {
+                updated_black_tiles.insert(*bt);
+            }
+        }
+        for wt in neighbors
+            .iter()
+            .filter_map(|(tile, count)| if *count == 2 { Some(tile) } else { None })
+        {
+            updated_black_tiles.insert(*wt);
+        }
+
+        self.black_tiles = updated_black_tiles;
+    }
+
+    pub fn update_n_days(&mut self, num_days: usize) {
+        for i in 0..num_days {
+            self.update_day();
+            eprintln!("Day {:>3}: {:>4}", i + 1, self.count_black_tiles());
         }
     }
 }
@@ -204,9 +246,18 @@ mod tests {
     #[test]
     fn part1_debug() -> Result<()> {
         let input = read_to_string(&PathBuf::from("debug.txt"))?;
-        let mut grid = Grid::from(input.as_str());
-        grid.process_all_paths();
+        let grid = Grid::from(input.as_str());
         assert_eq!(grid.count_black_tiles(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn part2_debug() -> Result<()> {
+        let input = read_to_string(&PathBuf::from("debug.txt"))?;
+        let mut grid = Grid::from(input.as_str());
+        assert_eq!(grid.count_black_tiles(), 10);
+        grid.update_n_days(100);
+        assert_eq!(grid.count_black_tiles(), 2208);
         Ok(())
     }
 }
